@@ -51,12 +51,12 @@ export function getDefaultPositions(count: number, shape: TableShape): Array<{ x
   const safeCount = Math.max(MIN_PARTICIPANTS, Math.min(MAX_PARTICIPANTS, count));
 
   if (shape === 'circle') {
-    const rx = safeCount >= 9 ? 40 : 37;
+    const rx = safeCount >= 9 ? 39 : 37;
     const ry = safeCount >= 9 ? 38 : 36;
     return Array.from({ length: safeCount }, (_, i) => {
       const angle = -Math.PI / 2 + (2 * Math.PI * i) / safeCount;
       return {
-        x: snapPercent(50 + rx * Math.cos(angle), 9, 91),
+        x: snapPercent(50 + rx * Math.cos(angle), 12, 88),
         y: snapPercent(50 + ry * Math.sin(angle), 12, 88),
       };
     });
@@ -65,24 +65,24 @@ export function getDefaultPositions(count: number, shape: TableShape): Array<{ x
   const [topCount, rightCount, bottomCount, leftCount] = RECT_SIDE_ALLOC[safeCount] ?? [4, 2, 4, 2];
   const positions: Array<{ x: number; y: number }> = [];
 
-  const topXs = distributeLine(topCount, topCount >= 4 ? 22 : 28, topCount >= 4 ? 78 : 72);
+  const topXs = distributeLine(topCount, topCount >= 4 ? 18 : 28, topCount >= 4 ? 82 : 72);
   for (const x of topXs) {
     positions.push({ x: snapPercent(x, 12, 88), y: 12 });
   }
 
-  const rightYs = distributeLine(rightCount, 34, 66);
+  const rightYs = distributeLine(rightCount, 35, 65);
   for (const y of rightYs) {
-    positions.push({ x: 90, y: snapPercent(y, 16, 84) });
+    positions.push({ x: 88, y: snapPercent(y, 16, 84) });
   }
 
-  const bottomXs = distributeLine(bottomCount, bottomCount >= 4 ? 22 : 28, bottomCount >= 4 ? 78 : 72).reverse();
+  const bottomXs = distributeLine(bottomCount, bottomCount >= 4 ? 18 : 28, bottomCount >= 4 ? 82 : 72).reverse();
   for (const x of bottomXs) {
     positions.push({ x: snapPercent(x, 12, 88), y: 88 });
   }
 
-  const leftYs = distributeLine(leftCount, 34, 66).reverse();
+  const leftYs = distributeLine(leftCount, 35, 65).reverse();
   for (const y of leftYs) {
-    positions.push({ x: 10, y: snapPercent(y, 16, 84) });
+    positions.push({ x: 12, y: snapPercent(y, 16, 84) });
   }
 
   return positions;

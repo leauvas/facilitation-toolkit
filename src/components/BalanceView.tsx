@@ -38,11 +38,14 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
     mode,
     recommendedTurnSec,
     setRecommendedTurnSec,
+    goalMinutes,
     sessionStatus,
     activeSpeakerId,
     activeSpeakerName,
+    elapsedAudioSec,
     currentTurnElapsedSec,
     facilitatorTotalSec,
+    timeline,
     participantMetrics,
     recoverableSession,
     addParticipant,
@@ -66,269 +69,409 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
     ? Math.max(0, 1 - currentTurnElapsedSec / recommendedTurnSec)
     : 1;
 
-  return (
-    <main className="relative flex flex-1 min-h-0 w-full flex-col overflow-hidden bg-[#FAF8F5]">
-      {/* Recovery Banner if interrupted session exists in IndexedDB */}
-      {recoverableSession && (
-        <div className="z-30 mx-auto mt-1.5 flex w-[96%] max-w-2xl shrink-0 items-center justify-between gap-2 rounded-2xl border border-[#C86D51]/40 bg-[#FFF8F5] px-3 py-1.5 shadow-sm">
-          <div className="min-w-0">
-            <p className="truncate text-xs font-bold text-[#8D3A21]">
-              이전 미완료 세션 백업이 발견되었습니다
-            </p>
-            <p className="truncate text-[11px] text-[#767066]">
-              시작: {new Date(recoverableSession.sessionStartedAt).toLocaleString('ko-KR')} ·{' '}
-              {formatClockMMSS(recoverableSession.totalDurationSec)}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => void recoverUnfinishedSession()}
-              className="flex items-center gap-1 rounded-full bg-[#8A9A5B] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#7A8A4E]"
-            >
-              <Download className="h-3 w-3" />
-              <span>복구/다운로드</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => void discardUnfinishedBackup()}
-              title="백업 삭제"
-              className="flex items-center gap-1 rounded-full border border-[#E5DEC9] bg-white px-2 py-1 text-[11px] font-semibold text-[#767066] hover:border-[#C86D51] hover:text-[#C86D51]"
-            >
-              <Trash2 className="h-3 w-3" />
-              <span className="hidden sm:inline">백업 삭제</span>
-            </button>
-          </div>
-        </div>
-      )}
+  const goalTotalSec = goalMinutes * 60;
+  const goalRemainingSec = Math.max(0, goalTotalSec - elapsedAudioSec);
+  const goalProgressPct =
+    goalTotalSec > 0 ? Math.min(100, Math.max(0, (goalRemainingSec / goalTotalSec) * 100)) : 0;
+  const isGoalOvertime = elapsedAudioSec > goalTotalSec;
 
-      {/* Interactive Table Canvas */}
-      <div ref={canvasRef} className="relative flex-1 min-h-0 w-full select-none overflow-hidden">
-        {/* Subtle grid guide when in layout mode */}
-        {mode === 'layout' && (
-          <div
-            className="pointer-events-none absolute inset-0 opacity-35"
-            style={{
-              backgroundImage: 'radial-gradient(#C7BFA9 1px, transparent 1px)',
-              backgroundSize: '20px 20px',
-            }}
-          />
+  const useTwoColBars = participants.length >= 7;
+  const recentLogs = timeline.slice(-2).reverse();
+
+  return (
+    <main className="relative flex flex-1 min-h-0 w-full flex-col overflow-hidden bg-stone-100 sm:flex-row landscape:flex-row">
+      {/* Left Column (~68%): Table Canvas + Compact Bottom Bar */}
+      <section className="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden">
+        {/* Recovery Banner if interrupted session exists in IndexedDB */}
+        {recoverableSession && (
+          <div className="z-20 mx-2 mt-1.5 flex shrink-0 items-center justify-between gap-2 rounded-2xl border border-orange-500 bg-orange-50 px-3 py-1.5 shadow-sm">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-bold text-orange-700">
+                이전 미완료 세션 백업이 발견되었습니다
+              </p>
+              <p className="truncate text-[11px] text-stone-600 tabular-nums">
+                시작: {new Date(recoverableSession.sessionStartedAt).toLocaleString('ko-KR')} ·{' '}
+                {formatClockMMSS(recoverableSession.totalDurationSec)}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => void recoverUnfinishedSession()}
+                className="flex items-center gap-1 rounded-full bg-lime-700 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-lime-800"
+              >
+                <Download className="h-3 w-3" />
+                <span>복구/다운로드</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void discardUnfinishedBackup()}
+                title="백업 삭제"
+                className="flex items-center gap-1 rounded-full border border-stone-200 bg-white px-2 py-1 text-[11px] font-semibold text-stone-600 hover:border-orange-500 hover:text-orange-700"
+              >
+                <Trash2 className="h-3 w-3" />
+                <span className="hidden sm:inline">백업 삭제</span>
+              </button>
+            </div>
+          </div>
         )}
 
-        {/* Center Conference Table (Rect or Circle) */}
-        <div
-          onClick={() => {
-            if (mode === 'discuss' && isParticipantSpeaking) {
-              selectSpeaker(activeSpeakerId);
-            }
-          }}
-          title={
-            mode === 'discuss' && isParticipantSpeaking
-              ? '터치하여 진행자 구간으로 복귀'
-              : undefined
-          }
-          className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 border border-[#DFD7C5] bg-white/90 shadow-sm transition-all duration-300 flex flex-col items-center justify-center text-center ${
-            mode === 'discuss' && isParticipantSpeaking ? 'cursor-pointer hover:border-[#8A9A5B]' : ''
-          } ${
-            tableShape === 'circle'
-              ? 'h-[138px] w-[138px] rounded-full sm:h-[212px] sm:w-[212px] md:h-[244px] md:w-[244px] [@media(max-height:450px)]:h-[126px] [@media(max-height:450px)]:w-[126px]'
-              : 'h-[36%] w-[44%] min-h-[116px] min-w-[160px] max-h-[244px] max-w-[356px] rounded-[28px] sm:rounded-[36px] [@media(max-height:450px)]:h-[38%] [@media(max-height:450px)]:w-[40%]'
-          }`}
-        >
-          <HourglassSvg
-            remainingRatio={remainingRatio}
-            isOvertime={isOvertime}
-            isActiveParticipant={isParticipantSpeaking}
-            isPaused={sessionStatus === 'paused'}
-            sizeClass="h-10 w-10 sm:h-16 sm:w-16 [@media(max-height:450px)]:h-9 [@media(max-height:450px)]:w-9"
-          />
+        {/* Interactive Table Canvas */}
+        <div ref={canvasRef} className="relative flex-1 min-h-0 w-full select-none overflow-hidden">
+          {mode === 'layout' && (
+            <div
+              className="pointer-events-none absolute inset-0 opacity-40"
+              style={{
+                backgroundImage:
+                  'radial-gradient(var(--color-stone-400) 1px, transparent 1px)',
+                backgroundSize: '20px 20px',
+              }}
+            />
+          )}
 
-          <div className="mt-0.5 px-2">
-            <p className="max-w-[136px] truncate text-[11px] font-bold text-[#2C2A25] sm:max-w-[200px] sm:text-xs">
-              {sessionStatus === 'idle'
-                ? '준비 완료'
-                : sessionStatus === 'paused'
-                  ? '일시정지'
-                  : isParticipantSpeaking
-                    ? `${activeSpeakerName} 발언 중`
-                    : '진행자 발언 중'}
-            </p>
-            <p
-              className={`tabular-nums text-sm font-extrabold sm:text-lg [@media(max-height:450px)]:text-xs ${
-                isOvertime
-                  ? 'text-[#C86D51]'
-                  : isParticipantSpeaking
-                    ? 'text-[#5E6B3B]'
-                    : 'text-[#767066]'
-              }`}
-            >
-              {isParticipantSpeaking
-                ? isOvertime
-                  ? `+${formatClockMMSS(turnOvertimeSec)}`
-                  : formatClockMMSS(turnRemainingSec)
-                : formatClockMMSS(facilitatorTotalSec)}
-            </p>
-          </div>
-
-          {/* Recommended turn duration quick selector */}
+          {/* Center Conference Table (Rect or True Square Circle) */}
           <div
-            onClick={(e) => e.stopPropagation()}
-            className="mt-1 flex items-center gap-0.5 rounded-full border border-[#E5DEC9] bg-[#FAF8F5] p-0.5"
+            onClick={() => {
+              if (mode === 'discuss' && isParticipantSpeaking) {
+                selectSpeaker(activeSpeakerId);
+              }
+            }}
+            title={
+              mode === 'discuss' && isParticipantSpeaking
+                ? '터치하여 진행자 구간으로 복귀'
+                : undefined
+            }
+            className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center border-2 border-stone-300 bg-stone-200/70 text-center shadow-inner transition-all duration-300 ${
+              mode === 'discuss' && isParticipantSpeaking
+                ? 'cursor-pointer hover:border-lime-600'
+                : ''
+            } ${
+              tableShape === 'circle'
+                ? 'aspect-square h-[142px] rounded-full sm:h-[196px] md:h-[224px] [@media(max-height:450px)]:h-[118px]'
+                : 'h-[38%] w-[46%] min-h-[116px] min-w-[164px] max-h-[228px] max-w-[332px] rounded-3xl [@media(max-height:450px)]:h-[112px] [@media(max-height:450px)]:min-h-[104px]'
+            }`}
           >
-            {TURN_PRESETS.map((preset) => (
-              <button
-                key={preset.sec}
-                type="button"
-                onClick={() => setRecommendedTurnSec(preset.sec)}
-                className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold transition sm:px-2 sm:text-[10px] ${
-                  recommendedTurnSec === preset.sec
-                    ? 'bg-[#8A9A5B] text-white'
-                    : 'text-[#767066] hover:text-[#2C2A25]'
+            <HourglassSvg
+              remainingRatio={remainingRatio}
+              isOvertime={isOvertime}
+              isActiveParticipant={isParticipantSpeaking}
+              isPaused={sessionStatus === 'paused'}
+              sizeClass="h-9 w-9 sm:h-14 sm:w-14 [@media(max-height:450px)]:h-7 [@media(max-height:450px)]:w-7"
+            />
+
+            <div className="px-2">
+              <p className="max-w-[110px] truncate text-[10px] font-bold text-stone-900 sm:max-w-[176px] sm:text-xs">
+                {sessionStatus === 'idle'
+                  ? '준비 완료'
+                  : sessionStatus === 'paused'
+                    ? '일시정지'
+                    : isParticipantSpeaking
+                      ? `${activeSpeakerName} 발언 중`
+                      : '진행자 발언 중'}
+              </p>
+              <p
+                className={`tabular-nums text-xs font-extrabold sm:text-base [@media(max-height:450px)]:text-xs ${
+                  isOvertime
+                    ? 'text-orange-700'
+                    : isParticipantSpeaking
+                      ? 'text-lime-800'
+                      : 'text-stone-600'
                 }`}
               >
-                {preset.label}
+                {isParticipantSpeaking
+                  ? isOvertime
+                    ? `+${formatClockMMSS(turnOvertimeSec)}`
+                    : formatClockMMSS(turnRemainingSec)
+                  : formatClockMMSS(facilitatorTotalSec)}
+              </p>
+            </div>
+
+            {/* Recommended turn duration single-row selector */}
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="mt-1 flex flex-nowrap items-center justify-center gap-0.5 rounded-full border border-stone-200 bg-white p-0.5 shadow-xs"
+            >
+              {TURN_PRESETS.map((preset) => (
+                <button
+                  key={preset.sec}
+                  type="button"
+                  onClick={() => setRecommendedTurnSec(preset.sec)}
+                  className={`whitespace-nowrap rounded-full px-1 py-0.5 text-[9px] font-bold transition sm:px-1.5 sm:text-[10px] ${
+                    recommendedTurnSec === preset.sec
+                      ? 'bg-lime-700 text-white'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Participant Cards around the table */}
+          {participants.map((p) => (
+            <ParticipantCard
+              key={p.id}
+              participant={p}
+              metrics={
+                participantMetrics[p.id] ?? {
+                  totalSec: 0,
+                  turnCount: 0,
+                  sharePct: 0,
+                  balanceState: 'unspoken',
+                  currentTurnElapsedSec: 0,
+                }
+              }
+              mode={mode}
+              sessionStatus={sessionStatus}
+              recommendedTurnSec={recommendedTurnSec}
+              participantCount={participants.length}
+              canDelete={participants.length > MIN_PARTICIPANTS && sessionStatus === 'idle'}
+              canvasRef={canvasRef}
+              onSelect={selectSpeaker}
+              onMove={moveParticipant}
+              onRename={renameParticipant}
+              onRemove={removeParticipant}
+            />
+          ))}
+        </div>
+
+        {/* Left Bottom Control Strip (height <= 32px, <= 28px on short landscape) */}
+        <footer className="z-20 flex h-8 w-full shrink-0 items-center justify-between gap-2 border-t border-stone-200 bg-white px-2 sm:px-3 [@media(max-height:450px)]:h-7">
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            {/* Table Shape Switcher */}
+            <div className="flex items-center rounded-full border border-stone-200 bg-stone-100 p-0.5">
+              <button
+                type="button"
+                onClick={() => setTableShape('rect')}
+                className={`flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+                  tableShape === 'rect'
+                    ? 'bg-lime-700 text-white'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+                title="4면 직사각형 테이블"
+              >
+                <RectIcon className="h-2.5 w-2.5" />
+                <span>4면</span>
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => setTableShape('circle')}
+                className={`flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+                  tableShape === 'circle'
+                    ? 'bg-lime-700 text-white'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+                title="원형 테이블"
+              >
+                <Circle className="h-2.5 w-2.5" />
+                <span>원형</span>
+              </button>
+            </div>
+
+            {/* Add Participant */}
+            <button
+              type="button"
+              disabled={participants.length >= MAX_PARTICIPANTS}
+              onClick={addParticipant}
+              className={`flex items-center gap-1 whitespace-nowrap rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[10px] font-semibold transition ${
+                participants.length >= MAX_PARTICIPANTS
+                  ? 'cursor-not-allowed text-stone-400'
+                  : 'text-stone-900 hover:border-lime-600 hover:text-lime-800'
+              }`}
+              title="참여자 추가 (최대 12명)"
+            >
+              <Plus className="h-3 w-3" />
+              <span>참여자 ({participants.length}/12)</span>
+            </button>
+
+            {mode === 'layout' && (
+              <button
+                type="button"
+                onClick={resetLayout}
+                className="flex items-center gap-1 whitespace-nowrap rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-stone-600 transition hover:border-orange-500 hover:text-orange-700"
+                title="좌석 배치 기본값으로 초기화"
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span>배치 초기화</span>
+              </button>
+            )}
+          </div>
+
+          {/* Legend */}
+          <div className="hidden items-center gap-2 text-[10px] font-semibold text-stone-600 md:flex">
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <span className="h-2 w-2 rounded-full bg-stone-300" />
+              미발언
+            </span>
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <span className="h-2 w-2 rounded-full bg-lime-700" />
+              발언 중
+            </span>
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              적정 균형
+            </span>
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <span className="h-2 w-2 rounded-full bg-orange-600" />
+              발언 집중
+            </span>
+          </div>
+        </footer>
+      </section>
+
+      {/* Right Column (~32%, 240px~280px): Zero-Scroll Live Sub-Info Panel */}
+      <aside className="flex h-[34%] min-h-[172px] max-h-[236px] w-full shrink-0 flex-col justify-between gap-1.5 overflow-hidden border-t border-stone-200 bg-white p-2 sm:h-full sm:max-h-none sm:w-[248px] sm:border-l sm:border-t-0 sm:p-2.5 md:w-[264px] lg:w-[280px] landscape:h-full landscape:max-h-none landscape:w-[240px] landscape:border-l landscape:border-t-0 [@media(max-height:450px)]:gap-1 [@media(max-height:450px)]:p-1.5">
+        {/* Top: Active Speaker, Facilitator Total & Goal Time Gauge */}
+        <div className="shrink-0 rounded-xl border border-stone-200 bg-stone-100 p-2 [@media(max-height:450px)]:p-1.5">
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span
+                className={`h-2 w-2 shrink-0 rounded-full ${
+                  sessionStatus === 'running'
+                    ? 'bg-lime-700 animate-pulse'
+                    : sessionStatus === 'paused'
+                      ? 'bg-orange-600'
+                      : 'bg-stone-400'
+                }`}
+              />
+              <span className="truncate text-xs font-bold text-stone-900">
+                {sessionStatus === 'idle' ? '진행자 대기' : activeSpeakerName}
+              </span>
+            </div>
+            <span className="shrink-0 tabular-nums text-xs font-bold text-lime-800">
+              {formatClockMMSS(currentTurnElapsedSec)}
+            </span>
+          </div>
+
+          <div className="mt-1 flex items-center justify-between text-[10px] font-semibold text-stone-600 tabular-nums">
+            <span>진행자 누적 {formatClockMMSS(facilitatorTotalSec)}</span>
+            <span className={isGoalOvertime ? 'text-orange-700' : 'text-stone-600'}>
+              목표 {goalMinutes}분 ·{' '}
+              {isLive
+                ? isGoalOvertime
+                  ? `+${formatClockMMSS(elapsedAudioSec - goalTotalSec)}`
+                  : formatClockMMSS(goalRemainingSec)
+                : formatClockMMSS(goalTotalSec)}
+            </span>
+          </div>
+
+          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-stone-200">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${
+                isGoalOvertime ? 'bg-orange-600' : 'bg-lime-700'
+              }`}
+              style={{ width: `${isLive ? goalProgressPct : 100}%` }}
+            />
           </div>
         </div>
 
-        {/* Participant Cards around the table */}
-        {participants.map((p) => (
-          <ParticipantCard
-            key={p.id}
-            participant={p}
-            metrics={
-              participantMetrics[p.id] ?? {
+        {/* Middle: Live Share Bar List (auto 2-col grid at >= 7 participants, zero scroll) */}
+        <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+          <div className="mb-1 flex shrink-0 items-center justify-between">
+            <span className="text-[11px] font-bold text-stone-600">실시간 발언 점유율</span>
+            <span className="text-[10px] font-semibold text-stone-400 tabular-nums">
+              {participants.length}명
+            </span>
+          </div>
+
+          <div
+            className={`grid flex-1 min-h-0 content-start overflow-hidden ${
+              useTwoColBars
+                ? 'grid-cols-2 gap-x-2.5 gap-y-1 [@media(max-height:450px)]:gap-y-0.5'
+                : 'grid-cols-1 gap-y-1.5 [@media(max-height:450px)]:gap-y-1'
+            }`}
+          >
+            {participants.map((p) => {
+              const m = participantMetrics[p.id] ?? {
                 totalSec: 0,
                 turnCount: 0,
                 sharePct: 0,
                 balanceState: 'unspoken',
                 currentTurnElapsedSec: 0,
-              }
-            }
-            mode={mode}
-            sessionStatus={sessionStatus}
-            recommendedTurnSec={recommendedTurnSec}
-            participantCount={participants.length}
-            canDelete={participants.length > MIN_PARTICIPANTS && sessionStatus === 'idle'}
-            canvasRef={canvasRef}
-            onSelect={selectSpeaker}
-            onMove={moveParticipant}
-            onRename={renameParticipant}
-            onRemove={removeParticipant}
-          />
-        ))}
-      </div>
+              };
 
-      {/* Slim Bottom Bar (never overlaps corner cards) */}
-      <footer className="z-20 flex h-8 sm:h-9 w-full shrink-0 items-center justify-between gap-2 border-t border-[#E5DEC9]/80 bg-white/85 px-2 sm:px-4 backdrop-blur-xs">
-        <div className="flex items-center gap-1 sm:gap-1.5">
-          {/* Table Shape Switcher */}
-          <div className="flex items-center rounded-full border border-[#E5DEC9] bg-[#FAF8F5] p-0.5">
-            <button
-              type="button"
-              onClick={() => setTableShape('rect')}
-              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition sm:text-[11px] ${
-                tableShape === 'rect'
-                  ? 'bg-[#8A9A5B] text-white'
-                  : 'text-[#5E584E] hover:text-[#2C2A25]'
-              }`}
-              title="4면 직사각형 테이블"
-            >
-              <RectIcon className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-              <span>4면</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTableShape('circle')}
-              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition sm:text-[11px] ${
-                tableShape === 'circle'
-                  ? 'bg-[#8A9A5B] text-white'
-                  : 'text-[#5E584E] hover:text-[#2C2A25]'
-              }`}
-              title="원형 테이블"
-            >
-              <Circle className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-              <span>원형</span>
-            </button>
+              const barColor =
+                m.balanceState === 'speaking'
+                  ? 'bg-lime-700'
+                  : m.balanceState === 'dominant'
+                    ? 'bg-orange-600'
+                    : m.balanceState === 'balanced'
+                      ? 'bg-emerald-500'
+                      : 'bg-stone-300';
+
+              return (
+                <div key={p.id} className="min-w-0">
+                  <div className="flex items-center justify-between gap-1 leading-tight">
+                    <span className="whitespace-nowrap text-[11px] font-bold text-stone-900 [@media(max-height:450px)]:text-[10px]">
+                      {p.name}
+                    </span>
+                    <span className="shrink-0 tabular-nums text-[10px] font-semibold text-stone-600">
+                      {Math.round(m.sharePct)}%
+                    </span>
+                  </div>
+                  <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-stone-100 [@media(max-height:450px)]:h-1">
+                    <div
+                      className={`h-full rounded-full transition-all duration-200 ${barColor}`}
+                      style={{ width: `${Math.min(100, Math.max(m.totalSec > 0 ? 4 : 0, m.sharePct))}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
+        </div>
 
-          {/* Add Participant (available in both layout and discuss mode for latecomers) */}
-          <button
-            type="button"
-            disabled={participants.length >= MAX_PARTICIPANTS}
-            onClick={addParticipant}
-            className={`flex items-center gap-1 rounded-full border border-[#E5DEC9] bg-white px-2.5 py-0.5 text-[10px] font-semibold transition sm:text-[11px] ${
-              participants.length >= MAX_PARTICIPANTS
-                ? 'cursor-not-allowed text-[#BFB8A9]'
-                : 'text-[#2C2A25] hover:border-[#8A9A5B] hover:text-[#5E6B3B]'
-            }`}
-            title="참여자 추가 (최대 12명)"
-          >
-            <Plus className="h-3 w-3" />
-            <span>참여자 ({participants.length}/12)</span>
-          </button>
-
-          {/* Reset Layout in layout mode */}
-          {mode === 'layout' && (
-            <button
-              type="button"
-              onClick={resetLayout}
-              className="flex items-center gap-1 rounded-full border border-[#E5DEC9] bg-white px-2.5 py-0.5 text-[10px] font-semibold text-[#5E584E] transition hover:border-[#C86D51] hover:text-[#C86D51] sm:text-[11px]"
-              title="좌석 배치 기본값으로 초기화"
-            >
-              <RotateCcw className="h-3 w-3" />
-              <span>배치 초기화</span>
-            </button>
+        {/* Bottom: Latest 2 Switch Logs */}
+        <div className="shrink-0 border-t border-stone-200 pt-1.5">
+          <div className="mb-0.5 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-stone-600">최근 전환 로그</span>
+            <span className="text-[10px] text-stone-400 tabular-nums">
+              {timeline.length}건
+            </span>
+          </div>
+          {recentLogs.length === 0 ? (
+            <p className="text-[10px] text-stone-400">화자 전환 기록이 여기에 표시됩니다.</p>
+          ) : (
+            <div className="space-y-0.5">
+              {recentLogs.map((entry) => (
+                <div
+                  key={`${entry.turn}-${entry.startSec}`}
+                  className="flex items-center justify-between gap-1 text-[10px] leading-tight"
+                >
+                  <span className="whitespace-nowrap font-bold text-stone-900">
+                    #{entry.turn} {entry.speaker}
+                  </span>
+                  <span className="shrink-0 tabular-nums text-stone-600">
+                    {formatClockMMSS(entry.startSec)}–{formatClockMMSS(entry.endSec)}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
-
-        {/* Balance Legend & Facilitator Separate Total */}
-        <div className="flex items-center gap-2 text-[10px] font-medium text-[#5E584E] sm:text-[11px]">
-          <div className="hidden items-center gap-2 md:flex">
-            <span className="flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-[#D7CFC1]" />
-              미발언
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-[#8A9A5B]" />
-              발언 중
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-[#B9CA98]" />
-              적정 균형
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-[#C86D51]" />
-              발언 집중
-            </span>
-          </div>
-          <span className="tabular-nums font-semibold text-[#2C2A25] md:border-l md:border-[#E5DEC9] md:pl-2">
-            진행자 {formatClockMMSS(facilitatorTotalSec)}
-          </span>
-        </div>
-      </footer>
+      </aside>
 
       {/* End Session Confirmation Modal */}
       {confirmEndOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2C2A25]/40 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-3xl border border-[#E5DEC9] bg-[#FAF8F5] p-5 shadow-2xl">
-            <h2 className="text-base font-bold text-[#2C2A25]">세션을 종료하시겠습니까?</h2>
-            <p className="mt-1.5 text-xs leading-relaxed text-[#6E675C]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm rounded-3xl border border-stone-200 bg-white p-5 shadow-2xl">
+            <h2 className="text-base font-bold text-stone-900">세션을 종료하시겠습니까?</h2>
+            <p className="mt-1.5 text-xs leading-relaxed text-stone-600">
               종료하면 지금까지 기록된 발언 타임라인과 녹음 파일을 정리하여 결과 리포트 모달을 엽니다.
             </p>
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={onCancelEnd}
-                className="rounded-full border border-[#E5DEC9] bg-white px-4 py-1.5 text-xs font-semibold text-[#5E584E] hover:bg-[#EFECE6]"
+                className="rounded-full border border-stone-200 bg-white px-4 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-100"
               >
                 계속 진행
               </button>
               <button
                 type="button"
                 onClick={onConfirmEnd}
-                className="rounded-full bg-[#C86D51] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#B45E44]"
+                className="rounded-full bg-orange-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-orange-700"
               >
                 세션 종료 및 리포트
               </button>

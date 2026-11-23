@@ -94,6 +94,7 @@ interface SessionContextValue {
   facilitatorTotalSec: number;
   participantsTotalSec: number;
   canUndo: boolean;
+  timeline: TimelineEntry[];
   participantMetrics: Record<string, LiveParticipantMetrics>;
   recoverableSession: SessionRecord | null;
   resultModal: ResultModalPayload | null;
@@ -936,6 +937,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     facilitatorTotalSec,
     participantsTotalSec,
     canUndo,
+    timeline: timelineSnapshot,
     participantMetrics,
     recoverableSession,
     resultModal,

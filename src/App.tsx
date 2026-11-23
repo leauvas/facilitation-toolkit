@@ -19,7 +19,7 @@ const ToolkitShell: React.FC = () => {
   };
 
   return (
-    <div className="safe-shell flex h-[100dvh] w-full flex-col overflow-hidden bg-[#FAF8F5] text-[#2C2A25]">
+    <div className="safe-shell flex h-[100dvh] w-full flex-col overflow-hidden bg-stone-100 text-stone-900">
       {!(activeTab === 'timer' && isFullscreen) && (
         <TopNavBar
           activeTab={activeTab}
@@ -44,7 +44,7 @@ const ToolkitShell: React.FC = () => {
       {toastMessage && (
         <div
           role="status"
-          className="pointer-events-none fixed bottom-4 left-1/2 z-[60] max-w-[90vw] -translate-x-1/2 rounded-full border border-[#E5DEC9] bg-[#2C2A25]/92 px-4 py-2 text-center text-xs font-medium text-[#FAF8F5] shadow-lg"
+          className="pointer-events-none fixed bottom-4 left-1/2 z-[60] max-w-[90vw] -translate-x-1/2 rounded-full border border-stone-200 bg-stone-900 px-4 py-2 text-center text-xs font-medium text-white shadow-lg"
         >
           {toastMessage}
         </div>

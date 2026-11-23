@@ -77,7 +77,10 @@ export const TimerView: React.FC = () => {
   const progressPct =
     durationSec > 0 ? Math.max(0, Math.min(100, (remainingSec / durationSec) * 100)) : 0;
   const isLowWarning =
-    subMode === 'countdown' && !isFinished && remainingSec > 0 && remainingSec <= Math.min(30, durationSec * 0.15);
+    subMode === 'countdown' &&
+    !isFinished &&
+    remainingSec > 0 &&
+    remainingSec <= Math.min(30, durationSec * 0.15);
 
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
@@ -88,28 +91,27 @@ export const TimerView: React.FC = () => {
 
   return (
     <main
-      className={`relative flex flex-1 min-h-0 w-full flex-col items-center justify-center overflow-hidden bg-[#FAF8F5] ${
+      className={`relative flex flex-1 min-h-0 w-full flex-col items-center justify-center overflow-hidden bg-stone-100 ${
         isFullscreen ? 'p-2 sm:p-6' : 'p-2 sm:p-5 [@media(max-height:450px)]:p-1.5'
       }`}
     >
       {/* Top Sub-Mode & Fullscreen Controls */}
       <div
-        className={`flex w-full max-w-4xl items-center justify-between gap-2 ${
+        className={`flex w-full max-w-4xl shrink-0 items-center justify-between gap-2 ${
           isFullscreen
             ? 'absolute left-1/2 top-3 z-20 -translate-x-1/2 px-4'
             : 'mb-2 sm:mb-4 [@media(max-height:450px)]:mb-1.5'
         }`}
       >
-        {/* Sub-mode Toggle */}
         {!isFullscreen ? (
-          <div className="flex items-center rounded-full border border-[#E5DEC9] bg-white p-0.5 shadow-2xs">
+          <div className="flex items-center rounded-full border border-stone-200 bg-white p-0.5 shadow-sm">
             <button
               type="button"
               onClick={() => setSubMode('countdown')}
               className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition ${
                 subMode === 'countdown'
-                  ? 'bg-[#8A9A5B] text-white'
-                  : 'text-[#5E584E] hover:text-[#2C2A25]'
+                  ? 'bg-lime-700 text-white'
+                  : 'text-stone-600 hover:text-stone-900'
               }`}
             >
               <TimerIcon className="h-3.5 w-3.5" />
@@ -120,8 +122,8 @@ export const TimerView: React.FC = () => {
               onClick={() => setSubMode('clock')}
               className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition ${
                 subMode === 'clock'
-                  ? 'bg-[#8A9A5B] text-white'
-                  : 'text-[#5E584E] hover:text-[#2C2A25]'
+                  ? 'bg-lime-700 text-white'
+                  : 'text-stone-600 hover:text-stone-900'
               }`}
             >
               <Clock className="h-3.5 w-3.5" />
@@ -132,7 +134,6 @@ export const TimerView: React.FC = () => {
           <div />
         )}
 
-        {/* Right Controls: Mute & Fullscreen */}
         <div className="flex items-center gap-1.5">
           {subMode === 'countdown' && (
             <button
@@ -140,8 +141,8 @@ export const TimerView: React.FC = () => {
               onClick={toggleMute}
               className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
                 isMuted
-                  ? 'border-[#E5DEC9] bg-[#EFECE6] text-[#767066]'
-                  : 'border-[#E5DEC9] bg-white text-[#2C2A25] hover:border-[#8A9A5B]'
+                  ? 'border-stone-200 bg-stone-100 text-stone-600'
+                  : 'border-stone-200 bg-white text-stone-900 hover:border-lime-600'
               }`}
               title="종료 차임벨 알림음 설정"
             >
@@ -152,7 +153,7 @@ export const TimerView: React.FC = () => {
           <button
             type="button"
             onClick={() => void toggleFullscreen()}
-            className="flex items-center gap-1 rounded-full border border-[#E5DEC9] bg-white px-2.5 py-1 text-xs font-semibold text-[#2C2A25] shadow-2xs transition hover:border-[#8A9A5B]"
+            className="flex items-center gap-1 rounded-full border border-stone-200 bg-white px-2.5 py-1 text-xs font-semibold text-stone-900 shadow-sm transition hover:border-lime-600"
           >
             {isFullscreen ? (
               <>
@@ -171,11 +172,11 @@ export const TimerView: React.FC = () => {
 
       {/* Classic Paper / Desk Clock Display Card */}
       <section
-        className={`relative flex w-full flex-col items-center justify-between rounded-[28px] border bg-white shadow-sm transition-colors duration-300 ${
+        className={`relative flex w-full flex-col items-center justify-between overflow-hidden rounded-3xl border shadow-sm transition-colors duration-300 ${
           isFullscreen
             ? 'h-full max-h-[82dvh] max-w-5xl p-5 sm:p-10'
             : 'flex-1 min-h-0 max-h-[520px] max-w-4xl p-4 sm:p-7 [@media(max-height:450px)]:p-3'
-        } ${isFinished ? 'border-[#C86D51] bg-[#FFF8F5]' : 'border-[#E5DEC9]'}`}
+        } ${isFinished ? 'border-orange-500 bg-orange-50' : 'border-stone-200 bg-white'}`}
       >
         {subMode === 'countdown' ? (
           <>
@@ -183,17 +184,17 @@ export const TimerView: React.FC = () => {
             <div className="flex w-full flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
                     isFinished
-                      ? 'bg-[#C86D51] text-white'
+                      ? 'bg-orange-600 text-white'
                       : isRunning
-                        ? 'bg-[#8A9A5B]/15 text-[#4B582A]'
-                        : 'bg-[#EFECE6] text-[#6E675C]'
+                        ? 'bg-lime-100/80 text-lime-800'
+                        : 'bg-stone-100 text-stone-600'
                   }`}
                 >
                   {isFinished ? '시간 종료' : isRunning ? '진행 중' : '대기 중'}
                 </span>
-                <span className="text-xs font-medium text-[#767066] tabular-nums">
+                <span className="text-xs font-semibold text-stone-600 tabular-nums">
                   설정: {formatCountdownDisplay(durationSec)}
                 </span>
               </div>
@@ -205,10 +206,10 @@ export const TimerView: React.FC = () => {
                       key={p.sec}
                       type="button"
                       onClick={() => setPresetDuration(p.sec)}
-                      className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold transition ${
+                      className={`whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold transition ${
                         durationSec === p.sec
-                          ? 'border-[#8A9A5B] bg-[#8A9A5B] text-white'
-                          : 'border-[#E5DEC9] bg-[#FAF8F5] text-[#5E584E] hover:bg-[#EFECE6]'
+                          ? 'border-lime-600 bg-lime-700 text-white'
+                          : 'border-stone-200 bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900'
                       }`}
                     >
                       {p.label}
@@ -219,18 +220,14 @@ export const TimerView: React.FC = () => {
             </div>
 
             {/* Giant Classic Digital Face */}
-            <div className="my-auto flex flex-col items-center justify-center py-2">
+            <div className="my-auto flex flex-col items-center justify-center py-1">
               <div
                 className={`tabular-nums font-bold tracking-tight transition-colors ${
                   isFullscreen
                     ? 'text-[18vw] leading-none sm:text-[148px] md:text-[176px]'
-                    : 'text-[16vw] leading-none sm:text-[112px] md:text-[136px] [@media(max-height:450px)]:text-[78px]'
+                    : 'text-[15vw] leading-none sm:text-[112px] md:text-[136px] [@media(max-height:450px)]:text-[72px]'
                 } ${
-                  isFinished
-                    ? 'text-[#C86D51]'
-                    : isLowWarning
-                      ? 'text-[#B45E44]'
-                      : 'text-[#2C2A25]'
+                  isFinished || isLowWarning ? 'text-orange-700' : 'text-stone-900'
                 }`}
               >
                 {formatCountdownDisplay(remainingSec)}
@@ -245,8 +242,8 @@ export const TimerView: React.FC = () => {
                   onClick={isRunning ? pauseCountdown : startCountdown}
                   className={`flex items-center gap-1.5 rounded-full px-5 py-2 text-xs font-bold text-white shadow-xs transition active:scale-95 sm:px-7 sm:py-2.5 sm:text-sm ${
                     isRunning
-                      ? 'bg-[#C86D51] hover:bg-[#B45E44]'
-                      : 'bg-[#8A9A5B] hover:bg-[#7A8A4E]'
+                      ? 'bg-orange-600 hover:bg-orange-700'
+                      : 'bg-lime-700 hover:bg-lime-800'
                   }`}
                 >
                   {isRunning ? (
@@ -265,7 +262,7 @@ export const TimerView: React.FC = () => {
                 <button
                   type="button"
                   onClick={resetCountdown}
-                  className="flex items-center gap-1.5 rounded-full border border-[#E5DEC9] bg-[#FAF8F5] px-4 py-2 text-xs font-semibold text-[#5E584E] transition hover:bg-[#EFECE6] sm:px-5 sm:py-2.5 sm:text-sm"
+                  className="flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-100 px-4 py-2 text-xs font-semibold text-stone-600 transition hover:bg-stone-200 hover:text-stone-900 sm:px-5 sm:py-2.5 sm:text-sm"
                 >
                   <RotateCcw className="h-4 w-4" />
                   <span>초기화</span>
@@ -274,7 +271,7 @@ export const TimerView: React.FC = () => {
                 {!isFullscreen && (
                   <form
                     onSubmit={handleApplyCustom}
-                    className="flex items-center gap-1 rounded-full border border-[#E5DEC9] bg-[#FAF8F5] px-2.5 py-1"
+                    className="flex items-center gap-1 rounded-full border border-stone-200 bg-stone-100 px-2.5 py-1"
                   >
                     <input
                       type="number"
@@ -283,9 +280,9 @@ export const TimerView: React.FC = () => {
                       value={customMin}
                       onChange={(e) => setCustomMin(e.target.value)}
                       aria-label="분 입력"
-                      className="w-10 bg-transparent text-center text-xs font-semibold tabular-nums text-[#2C2A25] focus:outline-none"
+                      className="w-10 bg-transparent text-center text-xs font-bold tabular-nums text-stone-900 focus:outline-none"
                     />
-                    <span className="text-[11px] text-[#767066]">분</span>
+                    <span className="text-[11px] text-stone-600">분</span>
                     <input
                       type="number"
                       min={0}
@@ -293,12 +290,12 @@ export const TimerView: React.FC = () => {
                       value={customSec}
                       onChange={(e) => setCustomSec(e.target.value)}
                       aria-label="초 입력"
-                      className="w-9 bg-transparent text-center text-xs font-semibold tabular-nums text-[#2C2A25] focus:outline-none"
+                      className="w-9 bg-transparent text-center text-xs font-bold tabular-nums text-stone-900 focus:outline-none"
                     />
-                    <span className="text-[11px] text-[#767066]">초</span>
+                    <span className="text-[11px] text-stone-600">초</span>
                     <button
                       type="submit"
-                      className="ml-1 rounded-full bg-[#8A9A5B] px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-[#7A8A4E]"
+                      className="ml-1 rounded-full bg-lime-700 px-2.5 py-0.5 text-[11px] font-bold text-white hover:bg-lime-800"
                     >
                       설정
                     </button>
@@ -307,10 +304,10 @@ export const TimerView: React.FC = () => {
               </div>
 
               {/* Bottom Remaining Progress Bar */}
-              <div className="h-2.5 w-full overflow-hidden rounded-full bg-[#EFECE6]">
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-stone-100">
                 <div
                   className={`h-full rounded-full transition-all duration-200 ${
-                    isFinished || isLowWarning ? 'bg-[#C86D51]' : 'bg-[#8A9A5B]'
+                    isFinished || isLowWarning ? 'bg-orange-600' : 'bg-lime-700'
                   }`}
                   style={{ width: `${progressPct}%` }}
                 />
@@ -320,23 +317,23 @@ export const TimerView: React.FC = () => {
         ) : (
           /* Classic Desk Clock Mode */
           <div className="my-auto flex w-full flex-col items-center justify-center text-center">
-            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-[#E5DEC9] bg-[#FAF8F5] px-3.5 py-1 text-xs font-semibold text-[#5E584E] sm:text-sm">
-              <Clock className="h-3.5 w-3.5 text-[#8A9A5B]" />
+            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-100 px-3.5 py-1 text-xs font-semibold text-stone-600 sm:text-sm">
+              <Clock className="h-3.5 w-3.5 text-lime-800" />
               <span>{dateLabel}</span>
             </div>
 
             <div
-              className={`tabular-nums font-bold tracking-tight text-[#2C2A25] ${
+              className={`tabular-nums font-bold tracking-tight text-stone-900 ${
                 isFullscreen
                   ? 'text-[16vw] leading-none sm:text-[132px] md:text-[164px]'
-                  : 'text-[15vw] leading-none sm:text-[104px] md:text-[128px] [@media(max-height:450px)]:text-[76px]'
+                  : 'text-[15vw] leading-none sm:text-[104px] md:text-[128px] [@media(max-height:450px)]:text-[72px]'
               }`}
             >
               {hh}:{mm}
-              <span className="text-[#8A9A5B]">:{ss}</span>
+              <span className="text-lime-800">:{ss}</span>
             </div>
 
-            <p className="mt-3 text-xs font-medium text-[#767066] sm:text-sm [@media(max-height:450px)]:mt-1.5">
+            <p className="mt-3 text-xs font-medium text-stone-600 sm:text-sm [@media(max-height:450px)]:mt-1.5">
               쉬는 시간 · 대기 안내용 탁상 전자시계
             </p>
           </div>

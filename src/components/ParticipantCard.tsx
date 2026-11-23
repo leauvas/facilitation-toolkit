@@ -58,33 +58,37 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
     : 1;
   const isTurnOvertime = isSpeaking && metrics.currentTurnElapsedSec > recommendedTurnSec;
 
-  // 4-stage balance color classes
-  let cardStyle = 'border-[#DDD6C7] bg-[#EFECE6] text-[#4E4940]'; // unspoken (warm gray)
-  let gaugeBg = 'bg-[#D7CFC1]';
-  let gaugeFill = 'bg-[#A69E8E]';
+  // 4-stage balance color classes strictly using built-in Tailwind palette
+  let cardStyle = 'border border-stone-200 bg-white shadow-sm';
+  let gaugeBg = 'bg-stone-200';
+  let gaugeFill = 'bg-stone-400';
+  let shareColor = 'text-stone-600';
 
   if (metrics.balanceState === 'speaking') {
-    cardStyle = `border-[#6C7B42] bg-[#8A9A5B] text-white ${
+    cardStyle = `border-2 border-lime-600 bg-lime-100/80 shadow-sm ${
       sessionStatus === 'running' ? 'animate-olive-pulse' : ''
     }`;
-    gaugeBg = 'bg-white/25';
-    gaugeFill = isTurnOvertime ? 'bg-[#F8D0C2]' : 'bg-white';
+    gaugeBg = 'bg-lime-200';
+    gaugeFill = isTurnOvertime ? 'bg-orange-600' : 'bg-lime-700';
+    shareColor = isTurnOvertime ? 'text-orange-700' : 'text-lime-800';
   } else if (metrics.balanceState === 'dominant') {
-    cardStyle = 'border-[#C86D51] bg-[#FDF2EE] text-[#8D3A21] shadow-xs';
-    gaugeBg = 'bg-[#F2D5CA]';
-    gaugeFill = 'bg-[#C86D51]';
+    cardStyle = 'border border-orange-500 bg-orange-50 shadow-sm';
+    gaugeBg = 'bg-orange-200';
+    gaugeFill = 'bg-orange-600';
+    shareColor = 'text-orange-700';
   } else if (metrics.balanceState === 'balanced') {
-    cardStyle = 'border-[#A7BA84] bg-[#E8EFE0] text-[#2F3B1F] shadow-2xs';
-    gaugeBg = 'bg-[#CFDDC0]';
-    gaugeFill = 'bg-[#8A9A5B]';
+    cardStyle = 'border border-emerald-400 bg-emerald-50 shadow-sm';
+    gaugeBg = 'bg-emerald-200';
+    gaugeFill = 'bg-emerald-600';
+    shareColor = 'text-emerald-800';
   }
 
-  // Responsive card dimensions scaled by participant count + landscape height
+  // Auto-scaled card sizing guaranteeing 3-4 Korean chars fit on 1 line without truncation
   const sizeClasses = isCompactCount
-    ? 'w-[74px] sm:w-[106px] md:w-[120px] px-1.5 py-1 sm:px-2 sm:py-1.5 rounded-xl [@media(max-height:450px)]:w-[92px] [@media(max-height:450px)]:py-0.5'
+    ? 'w-auto min-w-[84px] sm:min-w-[100px] px-1.5 py-1 sm:px-2 sm:py-1 rounded-xl [@media(max-height:450px)]:min-w-[82px] [@media(max-height:450px)]:py-0.5'
     : isMediumCount
-      ? 'w-[88px] sm:w-[120px] md:w-[134px] px-2 py-1.5 sm:px-2.5 sm:py-2 rounded-2xl [@media(max-height:450px)]:w-[104px] [@media(max-height:450px)]:py-1'
-      : 'w-[104px] sm:w-[134px] md:w-[148px] px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-2xl [@media(max-height:450px)]:w-[114px] [@media(max-height:450px)]:py-1.5';
+      ? 'w-auto min-w-[96px] sm:min-w-[114px] px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-2xl [@media(max-height:450px)]:min-w-[90px] [@media(max-height:450px)]:py-0.5'
+      : 'w-auto min-w-[108px] sm:min-w-[126px] px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-2xl [@media(max-height:450px)]:min-w-[100px] [@media(max-height:450px)]:py-1';
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (mode !== 'layout' || isEditingName) return;
@@ -146,13 +150,12 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           onSelect(participant.id);
         }
       }}
-      className={`absolute select-none border transition-all duration-150 ${sizeClasses} ${cardStyle} ${
+      className={`absolute select-none transition-all duration-150 ${sizeClasses} ${cardStyle} ${
         mode === 'layout'
           ? `touch-none cursor-grab ${isDragging ? 'z-30 scale-105 cursor-grabbing shadow-lg' : 'z-10 hover:shadow-md'}`
-          : 'cursor-pointer active:scale-95 z-10'
+          : 'z-10 cursor-pointer active:scale-95'
       }`}
     >
-      {/* Delete button in layout mode */}
       {mode === 'layout' && canDelete && !isEditingName && (
         <button
           type="button"
@@ -161,14 +164,14 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             onRemove(participant.id);
           }}
           title="참여자 삭제"
-          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-[#E5DEC9] bg-white text-[#767066] shadow-xs transition hover:border-[#C86D51] hover:text-[#C86D51]"
+          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-600 shadow-xs transition hover:border-orange-500 hover:text-orange-700"
         >
           <X className="h-3 w-3" />
         </button>
       )}
 
       <div className="flex items-stretch gap-1.5 sm:gap-2">
-        {/* Left Vertical Sand Gauge Bar */}
+        {/* Left Vertical Sand Gauge Bar (fixed w-1.5) */}
         <div
           className={`relative w-1.5 shrink-0 overflow-hidden rounded-full ${gaugeBg}`}
           title={isSpeaking ? '현재 발언 권장 시간 잔여 게이지' : '발언 균형 상태'}
@@ -182,14 +185,14 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                   : `${Math.round(turnRemainingRatio * 100)}%`
                 : metrics.totalSec > 0
                   ? '100%'
-                  : '20%',
+                  : '24%',
             }}
           />
         </div>
 
         {/* Card Content */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center justify-between gap-1.5">
             {isEditingName ? (
               <input
                 ref={inputRef}
@@ -206,21 +209,19 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                   }
                 }}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full rounded border border-[#8A9A5B] bg-white px-1 py-0.5 text-xs font-semibold text-[#2C2A25] focus:outline-none"
+                className="w-20 rounded border border-lime-600 bg-white px-1 py-0.5 text-xs font-bold text-stone-900 focus:outline-none"
               />
             ) : (
               <>
                 <span
-                  className={`truncate font-bold leading-tight ${
-                    isCompactCount
-                      ? 'text-[11px] sm:text-xs'
-                      : 'text-xs sm:text-sm'
+                  className={`whitespace-nowrap font-bold leading-tight text-stone-900 ${
+                    isCompactCount ? 'text-[11px] sm:text-xs' : 'text-xs sm:text-sm'
                   }`}
                 >
                   {participant.name}
                 </span>
                 {mode === 'layout' ? (
-                  <div className="flex shrink-0 items-center gap-0.5 opacity-75">
+                  <div className="flex shrink-0 items-center gap-0.5 text-stone-600">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -228,21 +229,15 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                         setIsEditingName(true);
                       }}
                       title="이름 수정"
-                      className="rounded p-0.5 hover:bg-black/10"
+                      className="rounded p-0.5 hover:bg-stone-100 hover:text-stone-900"
                     >
                       <Pencil className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                     </button>
-                    <GripVertical className="h-3 w-3 opacity-60" />
+                    <GripVertical className="h-3 w-3 text-stone-400" />
                   </div>
                 ) : (
                   <span
-                    className={`shrink-0 text-[10px] font-semibold tabular-nums ${
-                      isSpeaking
-                        ? 'text-white/90'
-                        : metrics.balanceState === 'dominant'
-                          ? 'text-[#C86D51]'
-                          : 'text-[#767066]'
-                    }`}
+                    className={`shrink-0 whitespace-nowrap text-[10px] font-bold tabular-nums ${shareColor}`}
                   >
                     {Math.round(metrics.sharePct)}%
                   </span>
@@ -252,16 +247,16 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           </div>
 
           <div
-            className={`mt-0.5 flex items-center justify-between gap-1 tabular-nums leading-tight ${
+            className={`mt-0.5 flex items-center justify-between gap-1.5 whitespace-nowrap tabular-nums leading-tight text-stone-600 ${
               isCompactCount ? 'text-[10px] sm:text-[11px]' : 'text-[11px] sm:text-xs'
-            } ${isSpeaking ? 'text-white/95' : 'opacity-80'}`}
+            }`}
           >
             <span>{formatClockMMSS(metrics.totalSec)}</span>
-            <span className="text-[10px] opacity-85">{metrics.turnCount}회</span>
+            <span className="text-[10px]">{metrics.turnCount}회</span>
           </div>
 
           {isTurnOvertime && (
-            <div className="mt-0.5 rounded bg-[#C86D51] px-1 py-[1px] text-center text-[9px] font-bold text-white">
+            <div className="mt-0.5 whitespace-nowrap rounded bg-orange-600 px-1 py-[1px] text-center text-[9px] font-bold text-white">
               권장 초과
             </div>
           )}
