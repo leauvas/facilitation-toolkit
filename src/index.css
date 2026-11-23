@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-ivory: #FAF8F5;
+    --surface-card: #FFFFFF;
+    --surface-muted: #EFECE6;
+    --border-warm: #E5DEC9;
+    --text-ink: #2C2A25;
+    --text-muted: #767066;
+    --olive-main: #8A9A5B;
+    --olive-deep: #6C7B42;
+    --sage-soft: #E5ECD8;
+    --terracotta: #C86D51;
+    --amber-soft: #F7E8E1;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100dvh;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: var(--bg-ivory);
+    color: var(--text-ink);
+    font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
+      'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.safe-shell {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+@keyframes olive-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(138, 154, 91, 0.38), 0 4px 12px rgba(138, 154, 91, 0.16);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(138, 154, 91, 0.12), 0 6px 16px rgba(138, 154, 91, 0.24);
+  }
+}
+
+.animate-olive-pulse {
+  animation: olive-pulse 2.1s ease-in-out infinite;
+}
+
+@keyframes sand-drop {
+  0% {
+    stroke-dashoffset: 14;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-sand-stream {
+  stroke-dasharray: 3 3;
+  animation: sand-drop 0.65s linear infinite;
+}
+
+@media (max-height: 450px) {
+  .landscape-compact-header {
+    height: 38px !important;
+    min-height: 38px !important;
+  }
+  .landscape-hide-label {
+    display: none;
+  }
+}
