@@ -109,6 +109,7 @@ interface SessionContextValue {
   setGoalMinutes: (mins: number) => void;
   setRecordingEnabled: (enabled: boolean) => void;
   addParticipant: () => void;
+  setParticipantCount: (count: number) => void;
   removeParticipant: (id: string) => void;
   renameParticipant: (id: string, name: string) => void;
   moveParticipant: (id: string, x: number, y: number) => void;
@@ -558,6 +559,52 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [facilitatorSeat, showFacilitatorSeat, showToast, tableShape]);
 
+  const setParticipantCount = useCallback(
+    (targetCount: number) => {
+      const clamped = Math.max(MIN_PARTICIPANTS, Math.min(MAX_PARTICIPANTS, Math.round(targetCount)));
+      const current = participantsRef.current;
+      const isLive =
+        engineRef.current.status === 'running' || engineRef.current.status === 'paused';
+
+      if (isLive && clamped < current.length) {
+        showToast('세션 진행 중에는 참여자 수를 줄일 수 없습니다.');
+        return;
+      }
+
+      if (clamped === current.length) return;
+
+      if (clamped > current.length) {
+        const nextList = [...current];
+        while (nextList.length < clamped) {
+          nextList.push(
+            createParticipant(nextList, tableShape, facilitatorSeat, showFacilitatorSeat)
+          );
+        }
+        if (isLive) {
+          setParticipants(nextList);
+        } else {
+          const redistributed = redistributeWithFacilitator(
+            nextList,
+            tableShape,
+            showFacilitatorSeat
+          );
+          setParticipants(redistributed.participants);
+          setFacilitatorSeat(redistributed.facilitatorSeat);
+        }
+      } else {
+        const sliced = current.slice(0, clamped);
+        const redistributed = redistributeWithFacilitator(
+          sliced,
+          tableShape,
+          showFacilitatorSeat
+        );
+        setParticipants(redistributed.participants);
+        setFacilitatorSeat(redistributed.facilitatorSeat);
+      }
+    },
+    [facilitatorSeat, showFacilitatorSeat, showToast, tableShape]
+  );
+
   const removeParticipant = useCallback(
     (id: string) => {
       if (engineRef.current.status === 'running' || engineRef.current.status === 'paused') {
@@ -1005,6 +1052,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setGoalMinutes,
     setRecordingEnabled,
     addParticipant,
+    setParticipantCount,
     removeParticipant,
     renameParticipant,
     moveParticipant,

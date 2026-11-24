@@ -83,12 +83,12 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
     shareColor = 'text-emerald-800';
   }
 
-  // Auto-scaled card sizing guaranteeing 3-4 Korean chars fit on 1 line without truncation
+  // Auto-scaled card sizing guaranteeing crisp 1-line names on portrait & landscape
   const sizeClasses = isCompactCount
-    ? 'w-auto min-w-[84px] sm:min-w-[100px] px-1.5 py-1 sm:px-2 sm:py-1 rounded-xl [@media(max-height:450px)]:min-w-[82px] [@media(max-height:450px)]:py-0.5'
+    ? 'w-auto min-w-[84px] max-w-[126px] px-2 py-1 sm:min-w-[100px] sm:px-2 sm:py-1 rounded-xl [@media(max-height:450px)]:min-w-[82px] [@media(max-height:450px)]:py-0.5'
     : isMediumCount
-      ? 'w-auto min-w-[96px] sm:min-w-[114px] px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-2xl [@media(max-height:450px)]:min-w-[90px] [@media(max-height:450px)]:py-0.5'
-      : 'w-auto min-w-[108px] sm:min-w-[126px] px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-2xl [@media(max-height:450px)]:min-w-[100px] [@media(max-height:450px)]:py-1';
+      ? 'w-auto min-w-[96px] max-w-[140px] px-2 py-1 sm:min-w-[114px] sm:px-2.5 sm:py-1.5 rounded-2xl [@media(max-height:450px)]:min-w-[90px] [@media(max-height:450px)]:py-0.5'
+      : 'w-auto min-w-[108px] max-w-[156px] px-2.5 py-1.5 sm:min-w-[126px] sm:px-3 sm:py-2 rounded-2xl [@media(max-height:450px)]:min-w-[100px] [@media(max-height:450px)]:py-1';
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (mode !== 'layout' || isEditingName) return;
@@ -214,7 +214,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             ) : (
               <>
                 <span
-                  className={`whitespace-nowrap font-bold leading-tight text-stone-900 ${
+                  className={`min-w-0 truncate whitespace-nowrap font-bold leading-tight text-stone-900 ${
                     isCompactCount ? 'text-[11px] sm:text-xs' : 'text-xs sm:text-sm'
                   }`}
                 >

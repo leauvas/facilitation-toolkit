@@ -1,8 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Circle,
   Download,
   Mic,
+  Minus,
   Plus,
   RotateCcw,
   Square as RectIcon,
@@ -54,6 +55,7 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
     participantMetrics,
     recoverableSession,
     addParticipant,
+    setParticipantCount,
     removeParticipant,
     renameParticipant,
     moveParticipant,
@@ -66,6 +68,22 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
   } = useSession();
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const [countDraft, setCountDraft] = useState<string>(String(participants.length));
+
+  useEffect(() => {
+    setCountDraft(String(participants.length));
+  }, [participants.length]);
+
+  const commitParticipantCount = () => {
+    const parsed = Number.parseInt(countDraft, 10);
+    if (Number.isNaN(parsed)) {
+      setCountDraft(String(participants.length));
+      return;
+    }
+    const clamped = Math.max(MIN_PARTICIPANTS, Math.min(MAX_PARTICIPANTS, parsed));
+    setParticipantCount(clamped);
+    setCountDraft(String(isLive && clamped < participants.length ? participants.length : clamped));
+  };
 
   const isLive = sessionStatus === 'running' || sessionStatus === 'paused';
   const isParticipantSpeaking = isLive && activeSpeakerId !== 'facilitator';
@@ -258,15 +276,15 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
           ))}
         </div>
 
-        {/* Left Bottom Control Strip (height <= 32px, <= 28px on short landscape) */}
-        <footer className="z-20 flex h-8 w-full shrink-0 items-center justify-between gap-2 border-t border-stone-200 bg-white px-2 sm:px-3 [@media(max-height:450px)]:h-7">
-          <div className="flex items-center gap-1 sm:gap-1.5">
+        {/* Left Bottom Control Strip (fits 390px portrait cleanly without wrapping) */}
+        <footer className="z-20 flex h-8 w-full shrink-0 items-center justify-between gap-1 border-t border-stone-200 bg-white px-1.5 sm:gap-2 sm:px-3 [@media(max-height:450px)]:h-7">
+          <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
             {/* Table Shape Switcher */}
-            <div className="flex items-center rounded-full border border-stone-200 bg-stone-100 p-0.5">
+            <div className="flex shrink-0 items-center rounded-full border border-stone-200 bg-stone-100 p-0.5">
               <button
                 type="button"
                 onClick={() => setTableShape('rect')}
-                className={`flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+                className={`flex items-center gap-1 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-semibold transition sm:px-2 ${
                   tableShape === 'rect'
                     ? 'bg-lime-700 text-white'
                     : 'text-stone-600 hover:text-stone-900'
@@ -279,7 +297,7 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
               <button
                 type="button"
                 onClick={() => setTableShape('circle')}
-                className={`flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+                className={`flex items-center gap-1 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-semibold transition sm:px-2 ${
                   tableShape === 'circle'
                     ? 'bg-lime-700 text-white'
                     : 'text-stone-600 hover:text-stone-900'
@@ -291,31 +309,64 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
               </button>
             </div>
 
-            {/* Add Participant */}
-            <button
-              type="button"
-              disabled={participants.length >= MAX_PARTICIPANTS}
-              onClick={addParticipant}
-              className={`flex items-center gap-1 whitespace-nowrap rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[10px] font-semibold transition ${
-                participants.length >= MAX_PARTICIPANTS
-                  ? 'cursor-not-allowed text-stone-400'
-                  : 'text-stone-900 hover:border-lime-600 hover:text-lime-800'
-              }`}
-              title="참여자 추가 (최대 12명)"
-            >
-              <Plus className="h-3 w-3" />
-              <span>참여자 ({participants.length}/12)</span>
-            </button>
+            {/* Participant Count Direct Numeric Stepper (2~12) */}
+            <div className="flex shrink-0 items-center rounded-full border border-stone-200 bg-stone-100 p-0.5">
+              <button
+                type="button"
+                disabled={isLive || participants.length <= MIN_PARTICIPANTS}
+                onClick={() => setParticipantCount(participants.length - 1)}
+                title={isLive ? '세션 중에는 인원 감소 불가' : '참여자 1명 줄이기'}
+                className={`flex h-5 w-5 items-center justify-center rounded-full transition ${
+                  isLive || participants.length <= MIN_PARTICIPANTS
+                    ? 'cursor-not-allowed text-stone-400'
+                    : 'bg-white text-stone-900 shadow-2xs hover:bg-stone-200'
+                }`}
+              >
+                <Minus className="h-2.5 w-2.5" />
+              </button>
+              <label className="flex items-center px-1 text-[10px] font-bold text-stone-900">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={MIN_PARTICIPANTS}
+                  max={MAX_PARTICIPANTS}
+                  value={countDraft}
+                  onChange={(e) => setCountDraft(e.target.value)}
+                  onBlur={commitParticipantCount}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  aria-label="참여자 인원수 입력 (2~12명)"
+                  className="w-6 bg-transparent text-center text-[11px] font-bold tabular-nums text-stone-900 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
+                <span className="whitespace-nowrap text-stone-600">명</span>
+              </label>
+              <button
+                type="button"
+                disabled={participants.length >= MAX_PARTICIPANTS}
+                onClick={addParticipant}
+                title="참여자 1명 추가 (최대 12명)"
+                className={`flex h-5 w-5 items-center justify-center rounded-full transition ${
+                  participants.length >= MAX_PARTICIPANTS
+                    ? 'cursor-not-allowed text-stone-400'
+                    : 'bg-white text-stone-900 shadow-2xs hover:bg-lime-100 hover:text-lime-800'
+                }`}
+              >
+                <Plus className="h-2.5 w-2.5" />
+              </button>
+            </div>
 
             {mode === 'layout' && (
               <button
                 type="button"
                 onClick={resetLayout}
-                className="flex items-center gap-1 whitespace-nowrap rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-stone-600 transition hover:border-orange-500 hover:text-orange-700"
+                className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-stone-600 transition hover:border-orange-500 hover:text-orange-700"
                 title="좌석 배치 기본값으로 초기화"
               >
-                <RotateCcw className="h-3 w-3" />
-                <span>배치 초기화</span>
+                <RotateCcw className="h-3 w-3 shrink-0" />
+                <span className="hidden sm:inline">배치 초기화</span>
               </button>
             )}
 
@@ -323,14 +374,14 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
             <button
               type="button"
               onClick={() => setShowFacilitatorSeat(!showFacilitatorSeat)}
-              className={`flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold transition ${
+              className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold transition ${
                 showFacilitatorSeat
                   ? 'border-stone-400 bg-stone-200 text-stone-800'
                   : 'border-stone-200 bg-white text-stone-500 hover:text-stone-800'
               }`}
               title="진행자 자리 표시 ON/OFF"
             >
-              <Mic className="h-2.5 w-2.5" />
+              <Mic className="h-2.5 w-2.5 shrink-0" />
               <span>진행자 자리</span>
             </button>
           </div>
@@ -438,9 +489,9 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
                       : 'bg-stone-300';
 
               return (
-                <div key={p.id} className="min-w-0">
+                <div key={p.id} className="min-w-0 px-0.5">
                   <div className="flex items-center justify-between gap-1 leading-tight">
-                    <span className="whitespace-nowrap text-[11px] font-bold text-stone-900 [@media(max-height:450px)]:text-[10px]">
+                    <span className="min-w-0 truncate whitespace-nowrap text-[11px] font-bold text-stone-900 [@media(max-height:450px)]:text-[10px]">
                       {p.name}
                     </span>
                     <span className="shrink-0 tabular-nums text-[10px] font-semibold text-stone-600">

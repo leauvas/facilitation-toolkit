@@ -103,53 +103,75 @@ export const TimerView: React.FC = () => {
     >
       {/* Top Sub-Mode & Fullscreen Controls */}
       <div
-        className={`flex w-full max-w-4xl shrink-0 items-center justify-between gap-2 ${
+        className={`flex w-full max-w-4xl shrink-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between ${
           isFullscreen
             ? 'absolute left-1/2 top-3 z-20 -translate-x-1/2 px-4'
             : 'mb-2 sm:mb-4 [@media(max-height:450px)]:mb-1.5'
         }`}
       >
-        {!isFullscreen ? (
-          <div className="flex items-center rounded-full border border-stone-200 bg-white p-0.5 shadow-sm">
-            <button
-              type="button"
-              onClick={() => setSubMode('countdown')}
-              className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition ${
-                subMode === 'countdown'
-                  ? 'bg-lime-700 text-white'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              <TimerIcon className="h-3.5 w-3.5" />
-              <span>카운트다운</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSubMode('clock')}
-              className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition ${
-                subMode === 'clock'
-                  ? 'bg-lime-700 text-white'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              <Clock className="h-3.5 w-3.5" />
-              <span>탁상시계</span>
-            </button>
-          </div>
-        ) : (
-          <div />
-        )}
+        {/* Row 1 on mobile portrait: Mode Switcher + Fullscreen */}
+        <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
+          {!isFullscreen ? (
+            <div className="flex shrink-0 items-center rounded-full border border-stone-200 bg-white p-0.5 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setSubMode('countdown')}
+                className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  subMode === 'countdown'
+                    ? 'bg-lime-700 text-white'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <TimerIcon className="h-3.5 w-3.5 shrink-0" />
+                <span>카운트다운</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubMode('clock')}
+                className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  subMode === 'clock'
+                    ? 'bg-lime-700 text-white'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <Clock className="h-3.5 w-3.5 shrink-0" />
+                <span>탁상시계</span>
+              </button>
+            </div>
+          ) : (
+            <div />
+          )}
 
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={() => void toggleFullscreen()}
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-stone-200 bg-white px-2.5 py-1 text-xs font-semibold text-stone-900 shadow-sm transition hover:border-lime-600 sm:hidden"
+          >
+            {isFullscreen ? (
+              <>
+                <Minimize2 className="h-3.5 w-3.5 shrink-0" />
+                <span>전체화면 종료</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="h-3.5 w-3.5 shrink-0" />
+                <span>전체화면</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Row 2 on mobile portrait (right side on sm+): Sound Selector, Preview, Mute, Desktop Fullscreen */}
+        <div className="flex w-full items-center justify-between gap-1.5 sm:w-auto sm:justify-end">
           {subMode === 'countdown' && (
             <>
               {!isFullscreen && (
-                <div className="flex items-center gap-1 rounded-full border border-stone-200 bg-white px-2 py-0.5 shadow-xs">
+                <div className="flex min-w-0 items-center gap-1 rounded-full border border-stone-200 bg-white px-2 py-0.5 shadow-xs">
                   <select
                     aria-label="종료 알림음 선택"
                     value={selectedSoundId}
                     onChange={(e) => setSelectedSoundId(e.target.value as SoundId)}
-                    className="max-w-[140px] cursor-pointer bg-transparent py-0.5 text-[11px] font-semibold text-stone-900 focus:outline-none sm:max-w-[180px] sm:text-xs"
+                    className="min-w-0 max-w-[165px] cursor-pointer bg-transparent py-0.5 text-[11px] font-semibold text-stone-900 focus:outline-none sm:max-w-[180px] sm:text-xs"
                   >
                     {SOUND_OPTIONS.map((opt) => (
                       <option key={opt.id} value={opt.id}>
@@ -179,31 +201,36 @@ export const TimerView: React.FC = () => {
               <button
                 type="button"
                 onClick={toggleMute}
-                className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
+                className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
                   isMuted
                     ? 'border-stone-200 bg-stone-100 text-stone-600'
                     : 'border-stone-200 bg-white text-stone-900 hover:border-lime-600'
                 }`}
                 title="종료 알림음 음소거 설정"
               >
-                {isMuted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-                <span className="hidden sm:inline">{isMuted ? '음소거' : '알림음 ON'}</span>
+                {isMuted ? (
+                  <VolumeX className="h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <Volume2 className="h-3.5 w-3.5 shrink-0" />
+                )}
+                <span>{isMuted ? '음소거' : '알림음 ON'}</span>
               </button>
             </>
           )}
+
           <button
             type="button"
             onClick={() => void toggleFullscreen()}
-            className="flex items-center gap-1 rounded-full border border-stone-200 bg-white px-2.5 py-1 text-xs font-semibold text-stone-900 shadow-sm transition hover:border-lime-600"
+            className="hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-stone-200 bg-white px-2.5 py-1 text-xs font-semibold text-stone-900 shadow-sm transition hover:border-lime-600 sm:flex"
           >
             {isFullscreen ? (
               <>
-                <Minimize2 className="h-3.5 w-3.5" />
+                <Minimize2 className="h-3.5 w-3.5 shrink-0" />
                 <span>전체화면 종료</span>
               </>
             ) : (
               <>
-                <Maximize2 className="h-3.5 w-3.5" />
+                <Maximize2 className="h-3.5 w-3.5 shrink-0" />
                 <span>전체화면</span>
               </>
             )}
