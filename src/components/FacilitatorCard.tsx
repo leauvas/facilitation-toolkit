@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { GripVertical, Mic } from 'lucide-react';
+import React from 'react';
+import { ArrowLeftRight, GripVertical, Mic } from 'lucide-react';
 import { BalanceMode, FacilitatorSeat, SessionStatus } from '../types/facilitation';
 import { formatClockMMSS } from '../lib/exportUtils';
+import { useSeatDrag } from '../hooks/useSeatDrag';
 
 interface FacilitatorCardProps {
   seat: FacilitatorSeat;
@@ -10,9 +11,18 @@ interface FacilitatorCardProps {
   mode: BalanceMode;
   sessionStatus: SessionStatus;
   isCompactCount: boolean;
+  isSwapTarget: boolean;
   canvasRef: React.RefObject<HTMLDivElement | null>;
+  getAllSeatPositions: () => Record<string, { x: number; y: number }>;
   onSelect: () => void;
   onMove: (x: number, y: number) => void;
+  onSwapTargetChange: (targetId: string | null) => void;
+  onSwapSeats: (
+    idA: string,
+    idB: string,
+    posA: { x: number; y: number },
+    posB: { x: number; y: number }
+  ) => void;
 }
 
 export const FacilitatorCard: React.FC<FacilitatorCardProps> = ({
@@ -22,11 +32,23 @@ export const FacilitatorCard: React.FC<FacilitatorCardProps> = ({
   mode,
   sessionStatus,
   isCompactCount,
+  isSwapTarget,
   canvasRef,
+  getAllSeatPositions,
   onSelect,
   onMove,
+  onSwapTargetChange,
+  onSwapSeats,
 }) => {
-  const [isDragging, setIsDragging] = useState(false);
+  const { isDragging, handlePointerDown } = useSeatDrag({
+    seatId: 'facilitator',
+    mode,
+    canvasRef,
+    getAllSeatPositions,
+    onMove,
+    onSwapTargetChange,
+    onSwapSeats,
+  });
 
   const isLive = sessionStatus === 'running' || sessionStatus === 'paused';
   const activeRing =
@@ -40,40 +62,13 @@ export const FacilitatorCard: React.FC<FacilitatorCardProps> = ({
     ? 'min-w-[84px] sm:min-w-[100px] px-2 py-1 rounded-xl [@media(max-height:450px)]:min-w-[82px] [@media(max-height:450px)]:py-0.5'
     : 'min-w-[96px] sm:min-w-[114px] px-2.5 py-1.5 rounded-2xl [@media(max-height:450px)]:min-w-[92px] [@media(max-height:450px)]:py-1';
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (mode !== 'layout') return;
-    e.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    setIsDragging(true);
-    const rect = canvas.getBoundingClientRect();
-
-    const updatePos = (clientX: number, clientY: number) => {
-      if (rect.width <= 0 || rect.height <= 0) return;
-      const pctX = ((clientX - rect.left) / rect.width) * 100;
-      const pctY = ((clientY - rect.top) / rect.height) * 100;
-      onMove(pctX, pctY);
-    };
-
-    const onPointerMove = (moveEv: PointerEvent) => {
-      updatePos(moveEv.clientX, moveEv.clientY);
-    };
-
-    const onPointerUp = () => {
-      setIsDragging(false);
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      window.removeEventListener('pointercancel', onPointerUp);
-    };
-
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-    window.addEventListener('pointercancel', onPointerUp);
-  };
+  const baseSurface = isSwapTarget
+    ? 'border-2 border-lime-600 bg-lime-50/90 text-stone-900 ring-2 ring-lime-600 scale-105 z-20 shadow-md'
+    : 'border-2 border-stone-400 bg-stone-200/90 text-stone-800 shadow-sm';
 
   return (
     <div
+      data-seat-id="facilitator"
       style={{
         left: `${seat.x}%`,
         top: `${seat.y}%`,
@@ -95,15 +90,21 @@ export const FacilitatorCard: React.FC<FacilitatorCardProps> = ({
       }}
       title={
         mode === 'layout'
-          ? '드래그하여 진행자 좌석 이동'
+          ? '드래그하여 진행자 좌석 이동 또는 다른 좌석과 자리 바꾸기'
           : '터치하여 진행자 발언 구간으로 복귀'
       }
-      className={`absolute select-none border-2 border-stone-400 bg-stone-200/90 text-stone-800 shadow-sm transition-all duration-150 ${sizeClasses} ${activeRing} ${
+      className={`absolute select-none transition-all duration-150 ${sizeClasses} ${baseSurface} ${activeRing} ${
         mode === 'layout'
           ? `touch-none cursor-grab ${isDragging ? 'z-30 scale-105 cursor-grabbing shadow-lg' : 'z-10 hover:shadow-md'}`
           : 'z-10 cursor-pointer hover:border-stone-500 active:scale-95'
       }`}
     >
+      {isSwapTarget && (
+        <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-lime-700 text-white shadow-sm">
+          <ArrowLeftRight className="h-2.5 w-2.5" />
+        </span>
+      )}
+
       <div className="flex items-center justify-between gap-1.5">
         <div className="flex items-center gap-1">
           <Mic

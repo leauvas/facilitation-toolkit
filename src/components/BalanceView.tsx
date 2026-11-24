@@ -60,6 +60,7 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
     renameParticipant,
     moveParticipant,
     moveFacilitatorSeat,
+    swapSeats,
     resetLayout,
     selectSpeaker,
     switchToFacilitator,
@@ -69,6 +70,18 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [countDraft, setCountDraft] = useState<string>(String(participants.length));
+  const [swapTargetId, setSwapTargetId] = useState<string | null>(null);
+
+  const getAllSeatPositions = () => {
+    const map: Record<string, { x: number; y: number }> = {};
+    for (const p of participants) {
+      map[p.id] = { x: p.x, y: p.y };
+    }
+    if (showFacilitatorSeat) {
+      map['facilitator'] = { x: facilitatorSeat.x, y: facilitatorSeat.y };
+    }
+    return map;
+  };
 
   useEffect(() => {
     setCountDraft(String(participants.length));
@@ -242,9 +255,13 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
               mode={mode}
               sessionStatus={sessionStatus}
               isCompactCount={participants.length >= 9}
+              isSwapTarget={swapTargetId === 'facilitator'}
               canvasRef={canvasRef}
+              getAllSeatPositions={getAllSeatPositions}
               onSelect={switchToFacilitator}
               onMove={moveFacilitatorSeat}
+              onSwapTargetChange={setSwapTargetId}
+              onSwapSeats={swapSeats}
             />
           )}
 
@@ -267,9 +284,13 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
               recommendedTurnSec={recommendedTurnSec}
               participantCount={participants.length}
               canDelete={participants.length > MIN_PARTICIPANTS && sessionStatus === 'idle'}
+              isSwapTarget={swapTargetId === p.id}
               canvasRef={canvasRef}
+              getAllSeatPositions={getAllSeatPositions}
               onSelect={selectSpeaker}
               onMove={moveParticipant}
+              onSwapTargetChange={setSwapTargetId}
+              onSwapSeats={swapSeats}
               onRename={renameParticipant}
               onRemove={removeParticipant}
             />

@@ -114,6 +114,12 @@ interface SessionContextValue {
   renameParticipant: (id: string, name: string) => void;
   moveParticipant: (id: string, x: number, y: number) => void;
   moveFacilitatorSeat: (x: number, y: number) => void;
+  swapSeats: (
+    idA: string,
+    idB: string,
+    posA: { x: number; y: number },
+    posB: { x: number; y: number }
+  ) => void;
   resetLayout: () => void;
   startSession: () => Promise<void>;
   pauseSession: () => void;
@@ -647,6 +653,40 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setFacilitatorSeat({ x: snappedX, y: snappedY });
   }, []);
 
+  const swapSeats = useCallback(
+    (
+      idA: string,
+      idB: string,
+      posA: { x: number; y: number },
+      posB: { x: number; y: number }
+    ) => {
+      if (idA === idB) return;
+      const targetForA = { x: snapPercent(posB.x, 8, 92), y: snapPercent(posB.y, 10, 90) };
+      const targetForB = { x: snapPercent(posA.x, 8, 92), y: snapPercent(posA.y, 10, 90) };
+
+      if (idA === 'facilitator') {
+        setFacilitatorSeat(targetForA);
+        setParticipants((prev) =>
+          prev.map((p) => (p.id === idB ? { ...p, ...targetForB } : p))
+        );
+      } else if (idB === 'facilitator') {
+        setFacilitatorSeat(targetForB);
+        setParticipants((prev) =>
+          prev.map((p) => (p.id === idA ? { ...p, ...targetForA } : p))
+        );
+      } else {
+        setParticipants((prev) =>
+          prev.map((p) => {
+            if (p.id === idA) return { ...p, ...targetForA };
+            if (p.id === idB) return { ...p, ...targetForB };
+            return p;
+          })
+        );
+      }
+    },
+    []
+  );
+
   const resetLayout = useCallback(() => {
     const next = redistributeWithFacilitator(
       participantsRef.current,
@@ -1057,6 +1097,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     renameParticipant,
     moveParticipant,
     moveFacilitatorSeat,
+    swapSeats,
     resetLayout,
     startSession,
     pauseSession,

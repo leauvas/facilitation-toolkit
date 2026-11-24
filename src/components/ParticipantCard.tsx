@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { GripVertical, Pencil, X } from 'lucide-react';
+import { ArrowLeftRight, GripVertical, Pencil, X } from 'lucide-react';
 import { BalanceMode, Participant, SessionStatus } from '../types/facilitation';
 import { LiveParticipantMetrics } from '../context/SessionContext';
 import { formatClockMMSS } from '../lib/exportUtils';
+import { useSeatDrag } from '../hooks/useSeatDrag';
 
 interface ParticipantCardProps {
   participant: Participant;
@@ -12,9 +13,18 @@ interface ParticipantCardProps {
   recommendedTurnSec: number;
   participantCount: number;
   canDelete: boolean;
+  isSwapTarget: boolean;
   canvasRef: React.RefObject<HTMLDivElement | null>;
+  getAllSeatPositions: () => Record<string, { x: number; y: number }>;
   onSelect: (id: string) => void;
   onMove: (id: string, x: number, y: number) => void;
+  onSwapTargetChange: (targetId: string | null) => void;
+  onSwapSeats: (
+    idA: string,
+    idB: string,
+    posA: { x: number; y: number },
+    posB: { x: number; y: number }
+  ) => void;
   onRename: (id: string, name: string) => void;
   onRemove: (id: string) => void;
 }
@@ -27,16 +37,30 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
   recommendedTurnSec,
   participantCount,
   canDelete,
+  isSwapTarget,
   canvasRef,
+  getAllSeatPositions,
   onSelect,
   onMove,
+  onSwapTargetChange,
+  onSwapSeats,
   onRename,
   onRemove,
 }) => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [draftName, setDraftName] = useState(participant.name);
-  const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const { isDragging, handlePointerDown } = useSeatDrag({
+    seatId: participant.id,
+    mode,
+    isBlocked: isEditingName,
+    canvasRef,
+    getAllSeatPositions,
+    onMove: (x, y) => onMove(participant.id, x, y),
+    onSwapTargetChange,
+    onSwapSeats,
+  });
 
   useEffect(() => {
     setDraftName(participant.name);
@@ -90,47 +114,18 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
       ? 'w-auto min-w-[96px] max-w-[140px] px-2 py-1 sm:min-w-[114px] sm:px-2.5 sm:py-1.5 rounded-2xl [@media(max-height:450px)]:min-w-[90px] [@media(max-height:450px)]:py-0.5'
       : 'w-auto min-w-[108px] max-w-[156px] px-2.5 py-1.5 sm:min-w-[126px] sm:px-3 sm:py-2 rounded-2xl [@media(max-height:450px)]:min-w-[100px] [@media(max-height:450px)]:py-1';
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (mode !== 'layout' || isEditingName) return;
-    if ((e.target as HTMLElement).closest('button, input')) return;
-
-    e.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    setIsDragging(true);
-    const rect = canvas.getBoundingClientRect();
-
-    const updatePos = (clientX: number, clientY: number) => {
-      if (rect.width <= 0 || rect.height <= 0) return;
-      const pctX = ((clientX - rect.left) / rect.width) * 100;
-      const pctY = ((clientY - rect.top) / rect.height) * 100;
-      onMove(participant.id, pctX, pctY);
-    };
-
-    const onPointerMove = (moveEv: PointerEvent) => {
-      updatePos(moveEv.clientX, moveEv.clientY);
-    };
-
-    const onPointerUp = () => {
-      setIsDragging(false);
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      window.removeEventListener('pointercancel', onPointerUp);
-    };
-
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-    window.addEventListener('pointercancel', onPointerUp);
-  };
-
   const commitName = () => {
     onRename(participant.id, draftName);
     setIsEditingName(false);
   };
 
+  const swapHighlightClass = isSwapTarget
+    ? 'ring-2 ring-lime-600 scale-105 bg-lime-50/90 z-20 shadow-md'
+    : '';
+
   return (
     <div
+      data-seat-id={participant.id}
       style={{
         left: `${participant.x}%`,
         top: `${participant.y}%`,
@@ -150,13 +145,18 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           onSelect(participant.id);
         }
       }}
-      className={`absolute select-none transition-all duration-150 ${sizeClasses} ${cardStyle} ${
+      className={`absolute select-none transition-all duration-150 ${sizeClasses} ${cardStyle} ${swapHighlightClass} ${
         mode === 'layout'
           ? `touch-none cursor-grab ${isDragging ? 'z-30 scale-105 cursor-grabbing shadow-lg' : 'z-10 hover:shadow-md'}`
           : 'z-10 cursor-pointer active:scale-95'
       }`}
     >
-      {mode === 'layout' && canDelete && !isEditingName && (
+      {isSwapTarget && (
+        <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-lime-700 text-white shadow-sm">
+          <ArrowLeftRight className="h-2.5 w-2.5" />
+        </span>
+      )}
+      {mode === 'layout' && canDelete && !isEditingName && !isSwapTarget && (
         <button
           type="button"
           onClick={(e) => {
