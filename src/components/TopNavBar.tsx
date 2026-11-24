@@ -79,42 +79,58 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
 
   return (
     <>
-      <header className="landscape-compact-header relative z-30 min-h-[44px] w-full shrink-0 border-b border-stone-200 bg-white py-1">
-        <div className="mx-auto flex h-full max-w-[1600px] items-center justify-between gap-1.5 px-2 sm:px-4">
-          {/* Left: Primary Tab Navigation */}
-          <nav
-            aria-label="도구 탭 전환"
-            className="flex shrink-0 items-center rounded-full bg-stone-100 p-0.5"
-          >
-            <button
-              type="button"
-              onClick={() => onNavigate('balance')}
-              className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-semibold transition-all ${
-                activeTab === 'balance'
-                  ? 'bg-lime-700 text-white shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
+      <header className="relative z-30 min-h-[44px] w-full shrink-0 border-b border-stone-200 bg-white py-1.5 sm:py-1">
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-1.5 px-2 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+          {/* Row 1: Primary Tab Navigation (and mini badge on timer tab) */}
+          <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
+            <nav
+              aria-label="도구 탭 전환"
+              className="flex shrink-0 items-center rounded-full bg-stone-100 p-0.5"
             >
-              <Users className="h-3.5 w-3.5 shrink-0" />
-              <span>모두의 목소리</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate('timer')}
-              className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-semibold transition-all ${
-                activeTab === 'timer'
-                  ? 'bg-lime-700 text-white shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              <Clock className="h-3.5 w-3.5 shrink-0" />
-              <span>전광판 타이머</span>
-            </button>
-          </nav>
+              <button
+                type="button"
+                onClick={() => onNavigate('balance')}
+                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all sm:py-2 ${
+                  activeTab === 'balance'
+                    ? 'bg-lime-700 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <Users className="h-3.5 w-3.5 shrink-0" />
+                <span>모두의 목소리</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('timer')}
+                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all sm:py-2 ${
+                  activeTab === 'timer'
+                    ? 'bg-lime-700 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <Clock className="h-3.5 w-3.5 shrink-0" />
+                <span>전광판 타이머</span>
+              </button>
+            </nav>
 
-          {/* Right: Context-specific Slim Controls */}
+            {activeTab === 'timer' && isLive && (
+              <button
+                type="button"
+                onClick={() => onNavigate('balance')}
+                className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-lime-600 bg-lime-100/80 px-2.5 py-1 text-[11px] font-semibold text-lime-800 shadow-xs transition hover:bg-lime-200/70 sm:hidden"
+              >
+                {recordingEnabled && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-orange-600 animate-pulse" />
+                )}
+                <span className="max-w-[80px] truncate">{activeSpeakerName}</span>
+                <span className="tabular-nums font-bold">{formatClockMMSS(elapsedAudioSec)}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Row 2 on mobile portrait (Right side on sm+): Session Controls */}
           {activeTab === 'balance' ? (
-            <div className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto sm:gap-1.5">
+            <div className="flex w-full flex-wrap items-center justify-between gap-1 sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-1.5">
               {/* Goal Time & Countdown Gauge Button */}
               <button
                 type="button"
@@ -122,7 +138,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                 title="전체 목표 시간 설정"
                 className="flex shrink-0 flex-col justify-center rounded-lg border border-stone-200 bg-stone-100 px-2 py-0.5 text-left transition hover:border-lime-600"
               >
-                <div className="flex items-center gap-1 whitespace-nowrap text-[10px] font-semibold leading-tight sm:text-[11px]">
+                <div className="flex items-center gap-1 whitespace-nowrap text-[11px] font-semibold leading-tight">
                   <span className="text-stone-600">목표 {goalMinutes}분</span>
                   {isLive && (
                     <span
@@ -148,7 +164,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
 
               {/* Active Speaker / Recording Status Badge */}
               <div
-                className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold sm:py-1 sm:text-[11px] ${
+                className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold ${
                   sessionStatus === 'running'
                     ? 'border-lime-600 bg-lime-100/80 text-lime-800'
                     : sessionStatus === 'paused'
@@ -166,7 +182,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                     REC
                   </span>
                 )}
-                <span className="max-w-[96px] truncate sm:max-w-[140px]">
+                <span className="max-w-[84px] truncate sm:max-w-[140px]">
                   {sessionStatus === 'idle'
                     ? '대기 중'
                     : sessionStatus === 'paused'
@@ -185,7 +201,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                 <button
                   type="button"
                   onClick={() => setRecordingEnabled(!recordingEnabled)}
-                  className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold transition sm:py-1 sm:text-[11px] ${
+                  className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold transition ${
                     recordingEnabled
                       ? 'border-orange-500 bg-orange-50 text-orange-700'
                       : 'border-stone-200 bg-stone-100 text-stone-600 hover:text-stone-900'
@@ -205,7 +221,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
               <button
                 type="button"
                 onClick={() => setMode(mode === 'layout' ? 'discuss' : 'layout')}
-                className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold transition sm:py-1 sm:text-[11px] ${
+                className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold transition ${
                   mode === 'layout'
                     ? 'border-lime-600 bg-lime-100/80 text-lime-800'
                     : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'
@@ -221,7 +237,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                 <button
                   type="button"
                   onClick={() => void startSession()}
-                  className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-lime-700 px-2.5 py-0.5 text-[11px] font-semibold text-white shadow-xs transition hover:bg-lime-800 active:scale-95 sm:px-3 sm:py-1 sm:text-xs"
+                  className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-lime-700 px-2.5 py-1 text-[11px] font-semibold text-white shadow-xs transition hover:bg-lime-800 active:scale-95 sm:px-3 sm:text-xs"
                 >
                   <Play className="h-3 w-3 fill-current" />
                   <span>시작</span>
@@ -231,7 +247,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                   <button
                     type="button"
                     onClick={sessionStatus === 'running' ? pauseSession : resumeSession}
-                    className={`flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold transition active:scale-95 sm:px-2.5 sm:py-1 sm:text-[11px] ${
+                    className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold transition active:scale-95 sm:px-2.5 ${
                       sessionStatus === 'paused'
                         ? 'border-lime-600 bg-lime-700 text-white hover:bg-lime-800'
                         : 'border-stone-200 bg-stone-100 text-stone-900 hover:bg-stone-200'
@@ -239,12 +255,12 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                   >
                     {sessionStatus === 'running' ? (
                       <>
-                        <Pause className="h-3 w-3" />
+                        <Pause className="h-3 w-3 shrink-0" />
                         <span className="landscape-hide-label sm:inline">일시정지</span>
                       </>
                     ) : (
                       <>
-                        <Play className="h-3 w-3 fill-current" />
+                        <Play className="h-3 w-3 shrink-0 fill-current" />
                         <span className="landscape-hide-label sm:inline">재개</span>
                       </>
                     )}
@@ -255,35 +271,35 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                     disabled={!canUndo}
                     onClick={undoLastSwitch}
                     title="직전 오터치 실행 취소 (직전 화자로 시간 병합)"
-                    className={`flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold transition sm:py-1 sm:text-[11px] ${
+                    className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold transition ${
                       canUndo
                         ? 'border-stone-200 bg-white text-stone-900 hover:bg-stone-100 active:scale-95'
                         : 'cursor-not-allowed border-stone-200 bg-stone-100 text-stone-400'
                     }`}
                   >
-                    <Undo2 className="h-3 w-3" />
+                    <Undo2 className="h-3 w-3 shrink-0" />
                     <span className="hidden md:inline">실행 취소</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={onRequestEndSession}
-                    className="flex items-center gap-1 whitespace-nowrap rounded-full bg-orange-600 px-2.5 py-0.5 text-[10px] font-semibold text-white transition hover:bg-orange-700 active:scale-95 sm:py-1 sm:text-[11px]"
+                    className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-orange-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-orange-700 active:scale-95"
                   >
-                    <Square className="h-2.5 w-2.5 fill-current" />
+                    <Square className="h-2.5 w-2.5 shrink-0 fill-current" />
                     <span>종료</span>
                   </button>
                 </div>
               )}
             </div>
           ) : (
-            /* On Timer Tab: Mini Live Session Badge */
-            <div className="flex items-center gap-2">
+            /* On Timer Tab (sm+): Mini Live Session Badge */
+            <div className="hidden items-center gap-2 sm:flex">
               {isLive ? (
                 <button
                   type="button"
                   onClick={() => onNavigate('balance')}
-                  className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-lime-600 bg-lime-100/80 px-2.5 py-0.5 text-[11px] font-semibold text-lime-800 shadow-xs transition hover:bg-lime-200/70 sm:py-1 sm:text-xs"
+                  className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-lime-600 bg-lime-100/80 px-2.5 py-1 text-xs font-semibold text-lime-800 shadow-xs transition hover:bg-lime-200/70"
                 >
                   {recordingEnabled && (
                     <span className="flex items-center gap-1 rounded-full bg-orange-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
@@ -303,8 +319,8 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                   </span>
                 </button>
               ) : (
-                <span className="hidden text-xs font-medium text-stone-600 sm:inline">
-                  facilitation.group Toolkit
+                <span className="text-xs font-medium text-stone-600">
+                  모두의 목소리 · AllVoices
                 </span>
               )}
             </div>
@@ -312,11 +328,11 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
         </div>
       </header>
 
-      {/* Portal Goal Time Selector Modal/Popover (never clipped by header overflow) */}
+      {/* Portal Goal Time Selector Modal/Popover */}
       {showGoalPopover &&
         createPortal(
           <div
-            className="fixed inset-0 z-50 flex items-start justify-end bg-stone-900/20 p-2 pt-14 sm:p-4 sm:pt-16"
+            className="fixed inset-0 z-50 flex items-start justify-end bg-stone-900/20 p-2 pt-24 sm:p-4 sm:pt-14"
             onClick={() => setShowGoalPopover(false)}
           >
             <div

@@ -429,10 +429,38 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
         </footer>
       </section>
 
-      {/* Right Column (~32%, 240px~280px): Zero-Scroll Live Sub-Info Panel */}
-      <aside className="flex h-[34%] min-h-[172px] max-h-[236px] w-full shrink-0 flex-col justify-between gap-1.5 overflow-hidden border-t border-stone-200 bg-white p-2 sm:h-full sm:max-h-none sm:w-[248px] sm:border-l sm:border-t-0 sm:p-2.5 md:w-[264px] lg:w-[280px] landscape:h-full landscape:max-h-none landscape:w-[240px] landscape:border-l landscape:border-t-0 [@media(max-height:450px)]:gap-1 [@media(max-height:450px)]:p-1.5">
-        {/* Top: Active Speaker, Facilitator Total & Goal Time Gauge */}
-        <div className="shrink-0 rounded-xl border border-stone-200 bg-stone-100 p-2 [@media(max-height:450px)]:p-1.5">
+      {/* Right Column (~32%, 240px~280px) / Bottom Portrait Panel (auto-height, zero scroll for 12명) */}
+      <aside className="flex h-auto max-h-none w-full shrink-0 flex-col gap-1.5 overflow-hidden border-t border-stone-200 bg-white p-2 sm:h-full sm:w-[248px] sm:justify-between sm:border-l sm:border-t-0 sm:p-2.5 md:w-[264px] lg:w-[280px] landscape:h-full landscape:w-[240px] landscape:justify-between landscape:border-l landscape:border-t-0 [@media(max-height:450px)]:gap-1 [@media(max-height:450px)]:p-1.5">
+        {/* Mobile Portrait Single-Row Status Bar */}
+        <div className="flex shrink-0 items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-100 px-2.5 py-1.5 text-xs sm:hidden landscape:hidden">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span
+              className={`h-2 w-2 shrink-0 rounded-full ${
+                sessionStatus === 'running'
+                  ? 'bg-lime-700 animate-pulse'
+                  : sessionStatus === 'paused'
+                    ? 'bg-orange-600'
+                    : 'bg-stone-400'
+              }`}
+            />
+            <span className="truncate font-bold text-stone-900">
+              {sessionStatus === 'idle' ? '진행자 대기' : activeSpeakerName}
+            </span>
+          </div>
+          <span className="shrink-0 tabular-nums text-[11px] font-semibold text-stone-600">
+            진행자 {formatClockMMSS(facilitatorTotalSec)}
+          </span>
+          <span
+            className={`shrink-0 tabular-nums text-[11px] font-bold ${
+              isGoalOvertime ? 'text-orange-700' : 'text-lime-800'
+            }`}
+          >
+            목표 {goalMinutes}분
+          </span>
+        </div>
+
+        {/* Desktop / Landscape Expanded Status Card */}
+        <div className="hidden shrink-0 rounded-xl border border-stone-200 bg-stone-100 p-2 sm:block landscape:block [@media(max-height:450px)]:p-1.5">
           <div className="flex items-center justify-between gap-1.5">
             <div className="flex min-w-0 items-center gap-1.5">
               <span
@@ -475,11 +503,16 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
           </div>
         </div>
 
-        {/* Middle: Live Share Bar List (auto 2-col grid at >= 7 participants, zero scroll) */}
+        {/* Middle: Live Share Chips (Portrait: 2-col <=6 / 3-col 7..12; Landscape/Desktop: 1-col / 2-col) */}
         <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
-          <div className="mb-1 flex shrink-0 items-center justify-between">
-            <span className="text-[11px] font-bold text-stone-600">실시간 발언 점유율</span>
-            <span className="text-[10px] font-semibold text-stone-400 tabular-nums">
+          <div className="mb-1 flex shrink-0 items-center justify-between gap-2">
+            <span className="shrink-0 text-[11px] font-bold text-stone-600">실시간 발언 점유율</span>
+            <span className="truncate text-[11px] text-stone-500 sm:hidden landscape:hidden">
+              {recentLogs[0]
+                ? `최근: ${recentLogs[0].speaker} (${formatClockMMSS(recentLogs[0].startSec)}–${formatClockMMSS(recentLogs[0].endSec)})`
+                : `${participants.length}명`}
+            </span>
+            <span className="hidden text-[10px] font-semibold text-stone-400 tabular-nums sm:inline landscape:inline">
               {participants.length}명
             </span>
           </div>
@@ -487,8 +520,8 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
           <div
             className={`grid flex-1 min-h-0 content-start overflow-hidden ${
               useTwoColBars
-                ? 'grid-cols-2 gap-x-2.5 gap-y-1 [@media(max-height:450px)]:gap-y-0.5'
-                : 'grid-cols-1 gap-y-1.5 [@media(max-height:450px)]:gap-y-1'
+                ? 'grid-cols-3 gap-1 sm:grid-cols-2 sm:gap-x-2 sm:gap-y-1 landscape:grid-cols-2 landscape:gap-x-2 landscape:gap-y-1 [@media(max-height:450px)]:gap-y-0.5'
+                : 'grid-cols-2 gap-1.5 sm:grid-cols-1 sm:gap-y-1.5 landscape:grid-cols-1 landscape:gap-y-1 [@media(max-height:450px)]:gap-y-1'
             }`}
           >
             {participants.map((p) => {
@@ -500,29 +533,46 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
                 currentTurnElapsedSec: 0,
               };
 
+              const dotColor =
+                m.balanceState === 'speaking'
+                  ? 'bg-lime-600'
+                  : m.balanceState === 'dominant'
+                    ? 'bg-orange-500'
+                    : m.balanceState === 'balanced'
+                      ? 'bg-emerald-500'
+                      : 'bg-stone-300';
+
               const barColor =
                 m.balanceState === 'speaking'
-                  ? 'bg-lime-700'
+                  ? 'bg-lime-600'
                   : m.balanceState === 'dominant'
-                    ? 'bg-orange-600'
+                    ? 'bg-orange-500'
                     : m.balanceState === 'balanced'
                       ? 'bg-emerald-500'
                       : 'bg-stone-300';
 
               return (
-                <div key={p.id} className="min-w-0 px-0.5">
+                <div
+                  key={p.id}
+                  className="min-w-0 rounded-lg border border-stone-200 bg-stone-50/80 px-2 py-1 [@media(max-height:450px)]:px-1.5 [@media(max-height:450px)]:py-0.5"
+                >
                   <div className="flex items-center justify-between gap-1 leading-tight">
-                    <span className="min-w-0 truncate whitespace-nowrap text-[11px] font-bold text-stone-900 [@media(max-height:450px)]:text-[10px]">
-                      {p.name}
-                    </span>
-                    <span className="shrink-0 tabular-nums text-[10px] font-semibold text-stone-600">
+                    <div className="flex min-w-0 items-center gap-1">
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotColor}`} />
+                      <span className="min-w-0 truncate whitespace-nowrap text-xs font-semibold text-stone-900 sm:text-[11px] [@media(max-height:450px)]:text-[10px]">
+                        {p.name}
+                      </span>
+                    </div>
+                    <span className="shrink-0 tabular-nums text-[11px] font-semibold text-stone-600 sm:text-[10px]">
                       {Math.round(m.sharePct)}%
                     </span>
                   </div>
-                  <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-stone-100 [@media(max-height:450px)]:h-1">
+                  <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-stone-200">
                     <div
                       className={`h-full rounded-full transition-all duration-200 ${barColor}`}
-                      style={{ width: `${Math.min(100, Math.max(m.totalSec > 0 ? 4 : 0, m.sharePct))}%` }}
+                      style={{
+                        width: `${Math.min(100, Math.max(m.totalSec > 0 ? 4 : 0, m.sharePct))}%`,
+                      }}
                     />
                   </div>
                 </div>
@@ -531,8 +581,8 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
           </div>
         </div>
 
-        {/* Bottom: Latest 2 Switch Logs */}
-        <div className="shrink-0 border-t border-stone-200 pt-1.5">
+        {/* Bottom: Latest 2 Switch Logs (hidden on portrait to keep 12명 grid zero-scroll) */}
+        <div className="hidden shrink-0 border-t border-stone-200 pt-1.5 sm:block landscape:block">
           <div className="mb-0.5 flex items-center justify-between">
             <span className="text-[10px] font-bold text-stone-600">최근 전환 로그</span>
             <span className="text-[10px] text-stone-400 tabular-nums">
