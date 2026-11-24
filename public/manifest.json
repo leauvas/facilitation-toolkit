@@ -2,7 +2,7 @@
   "name": "모두의 목소리",
   "short_name": "모두의 목소리",
   "description": "AllVoices — 퍼실리테이션 발언 균형 트래커 & 전광판 타이머",
-  "start_url": "/toolkit/balance",
+  "start_url": "/toolkit/allvoices",
   "scope": "/",
   "display": "standalone",
   "background_color": "#fafaf9",

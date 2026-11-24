@@ -1,16 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
 import { TabRoute } from '../types/facilitation';
 
-function resolvePathToTab(pathname: string): { tab: TabRoute; canonicalPath: string; needsReplace: boolean } {
+function resolvePathToTab(pathname: string): {
+  tab: TabRoute;
+  canonicalPath: string;
+  needsReplace: boolean;
+} {
   const clean = pathname.replace(/\/+$/, '') || '/';
   if (clean === '/toolkit/timer') {
     return { tab: 'timer', canonicalPath: '/toolkit/timer', needsReplace: pathname !== '/toolkit/timer' };
   }
-  if (clean === '/toolkit/balance') {
-    return { tab: 'balance', canonicalPath: '/toolkit/balance', needsReplace: pathname !== '/toolkit/balance' };
+  if (clean === '/toolkit/allvoices') {
+    return {
+      tab: 'balance',
+      canonicalPath: '/toolkit/allvoices',
+      needsReplace: pathname !== '/toolkit/allvoices',
+    };
   }
-  // '/' or '/toolkit' or any fallback redirects to '/toolkit/balance'
-  return { tab: 'balance', canonicalPath: '/toolkit/balance', needsReplace: true };
+  // '/', '/toolkit', legacy '/toolkit/balance', or fallback redirects to '/toolkit/allvoices'
+  return { tab: 'balance', canonicalPath: '/toolkit/allvoices', needsReplace: true };
 }
 
 export function useRouteTab() {
@@ -35,7 +43,7 @@ export function useRouteTab() {
   }, []);
 
   const navigate = useCallback((tab: TabRoute) => {
-    const targetPath = tab === 'timer' ? '/toolkit/timer' : '/toolkit/balance';
+    const targetPath = tab === 'timer' ? '/toolkit/timer' : '/toolkit/allvoices';
     if (window.location.pathname !== targetPath) {
       window.history.pushState(null, '', targetPath);
     }
