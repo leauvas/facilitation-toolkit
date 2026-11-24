@@ -6,11 +6,13 @@ import {
   Pause,
   Play,
   RotateCcw,
+  Square,
   Timer as TimerIcon,
   Volume2,
   VolumeX,
 } from 'lucide-react';
 import { useTimer } from '../context/TimerContext';
+import { SOUND_OPTIONS, SoundId } from '../lib/soundEngine';
 
 const PRESETS = [
   { label: '3분', sec: 180 },
@@ -43,11 +45,15 @@ export const TimerView: React.FC = () => {
     isFinished,
     isMuted,
     isFullscreen,
+    selectedSoundId,
+    isPreviewing,
     setPresetDuration,
+    setSelectedSoundId,
     startCountdown,
     pauseCountdown,
     resetCountdown,
     toggleMute,
+    togglePreview,
     toggleFullscreen,
   } = useTimer();
 
@@ -134,21 +140,56 @@ export const TimerView: React.FC = () => {
           <div />
         )}
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           {subMode === 'countdown' && (
-            <button
-              type="button"
-              onClick={toggleMute}
-              className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
-                isMuted
-                  ? 'border-stone-200 bg-stone-100 text-stone-600'
-                  : 'border-stone-200 bg-white text-stone-900 hover:border-lime-600'
-              }`}
-              title="종료 차임벨 알림음 설정"
-            >
-              {isMuted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-              <span className="hidden sm:inline">{isMuted ? '음소거' : '알림음 ON'}</span>
-            </button>
+            <>
+              {!isFullscreen && (
+                <div className="flex items-center gap-1 rounded-full border border-stone-200 bg-white px-2 py-0.5 shadow-xs">
+                  <select
+                    aria-label="종료 알림음 선택"
+                    value={selectedSoundId}
+                    onChange={(e) => setSelectedSoundId(e.target.value as SoundId)}
+                    className="max-w-[140px] cursor-pointer bg-transparent py-0.5 text-[11px] font-semibold text-stone-900 focus:outline-none sm:max-w-[180px] sm:text-xs"
+                  >
+                    {SOUND_OPTIONS.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={togglePreview}
+                    title={isPreviewing ? '미리듣기 정지' : '알림음 미리듣기'}
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition ${
+                      isPreviewing
+                        ? 'bg-orange-600 text-white hover:bg-orange-700'
+                        : 'bg-lime-100/80 text-lime-800 hover:bg-lime-200'
+                    }`}
+                  >
+                    {isPreviewing ? (
+                      <Square className="h-2.5 w-2.5 fill-current" />
+                    ) : (
+                      <Play className="h-3 w-3 fill-current" />
+                    )}
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={toggleMute}
+                className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
+                  isMuted
+                    ? 'border-stone-200 bg-stone-100 text-stone-600'
+                    : 'border-stone-200 bg-white text-stone-900 hover:border-lime-600'
+                }`}
+                title="종료 알림음 음소거 설정"
+              >
+                {isMuted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                <span className="hidden sm:inline">{isMuted ? '음소거' : '알림음 ON'}</span>
+              </button>
+            </>
           )}
           <button
             type="button"

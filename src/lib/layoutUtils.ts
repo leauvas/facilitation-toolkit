@@ -1,4 +1,4 @@
-import { BalanceSettings, Participant, TableShape } from '../types/facilitation';
+import { BalanceSettings, FacilitatorSeat, Participant, TableShape } from '../types/facilitation';
 
 const STORAGE_KEY = 'facilitation_balance_settings_v1';
 
@@ -20,7 +20,7 @@ const DEFAULT_NAMES = [
   '배수진',
 ];
 
-// [top, right, bottom, left] counts for 2..12 participants around a 4-sided table
+// [top, right, bottom, left] counts for 2..13 seats (up to 12 participants + 1 facilitator)
 const RECT_SIDE_ALLOC: Record<number, [number, number, number, number]> = {
   2: [1, 0, 1, 0],
   3: [1, 1, 1, 0],
@@ -33,6 +33,7 @@ const RECT_SIDE_ALLOC: Record<number, [number, number, number, number]> = {
   10: [3, 2, 3, 2],
   11: [4, 2, 3, 2],
   12: [4, 2, 4, 2],
+  13: [4, 3, 4, 2],
 };
 
 export function snapPercent(val: number, min = 8, max = 92): number {
@@ -48,7 +49,7 @@ function distributeLine(count: number, min: number, max: number): number[] {
 }
 
 export function getDefaultPositions(count: number, shape: TableShape): Array<{ x: number; y: number }> {
-  const safeCount = Math.max(MIN_PARTICIPANTS, Math.min(MAX_PARTICIPANTS, count));
+  const safeCount = Math.max(MIN_PARTICIPANTS, Math.min(MAX_PARTICIPANTS + 1, count));
 
   if (shape === 'circle') {
     const rx = safeCount >= 9 ? 39 : 37;
@@ -62,7 +63,7 @@ export function getDefaultPositions(count: number, shape: TableShape): Array<{ x
     });
   }
 
-  const [topCount, rightCount, bottomCount, leftCount] = RECT_SIDE_ALLOC[safeCount] ?? [4, 2, 4, 2];
+  const [topCount, rightCount, bottomCount, leftCount] = RECT_SIDE_ALLOC[safeCount] ?? [4, 3, 4, 2];
   const positions: Array<{ x: number; y: number }> = [];
 
   const topXs = distributeLine(topCount, topCount >= 4 ? 18 : 28, topCount >= 4 ? 82 : 72);
@@ -70,12 +71,16 @@ export function getDefaultPositions(count: number, shape: TableShape): Array<{ x
     positions.push({ x: snapPercent(x, 12, 88), y: 12 });
   }
 
-  const rightYs = distributeLine(rightCount, 35, 65);
+  const rightYs = distributeLine(rightCount, rightCount >= 3 ? 28 : 35, rightCount >= 3 ? 72 : 65);
   for (const y of rightYs) {
     positions.push({ x: 88, y: snapPercent(y, 16, 84) });
   }
 
-  const bottomXs = distributeLine(bottomCount, bottomCount >= 4 ? 18 : 28, bottomCount >= 4 ? 82 : 72).reverse();
+  const bottomXs = distributeLine(
+    bottomCount,
+    bottomCount >= 4 ? 18 : 28,
+    bottomCount >= 4 ? 82 : 72
+  ).reverse();
   for (const x of bottomXs) {
     positions.push({ x: snapPercent(x, 12, 88), y: 88 });
   }
@@ -88,9 +93,30 @@ export function getDefaultPositions(count: number, shape: TableShape): Array<{ x
   return positions;
 }
 
+export function getDefaultLayoutWithFacilitator(
+  participantCount: number,
+  shape: TableShape,
+  includeFacilitator = true
+): { participantPositions: Array<{ x: number; y: number }>; facilitatorSeat: FacilitatorSeat } {
+  const totalSeats = includeFacilitator ? participantCount + 1 : participantCount;
+  const allPositions = getDefaultPositions(totalSeats, shape);
+
+  if (!includeFacilitator) {
+    return {
+      participantPositions: allPositions.slice(0, participantCount),
+      facilitatorSeat: { x: 50, y: 88 },
+    };
+  }
+
+  // Place facilitator in the last seat (or bottom-center / top-center slot depending on count)
+  const facilitatorSeat = allPositions[allPositions.length - 1] ?? { x: 50, y: 88 };
+  const participantPositions = allPositions.slice(0, participantCount);
+  return { participantPositions, facilitatorSeat };
+}
+
 export function getDefaultParticipants(count = 6, shape: TableShape = 'rect'): Participant[] {
-  const positions = getDefaultPositions(count, shape);
-  return positions.map((pos, idx) => ({
+  const { participantPositions } = getDefaultLayoutWithFacilitator(count, shape, true);
+  return participantPositions.map((pos, idx) => ({
     id: `p_${idx + 1}_${Math.random().toString(36).slice(2, 6)}`,
     name: DEFAULT_NAMES[idx] ?? `참여자 ${idx + 1}`,
     x: pos.x,
@@ -98,20 +124,34 @@ export function getDefaultParticipants(count = 6, shape: TableShape = 'rect'): P
   }));
 }
 
-export function redistributeParticipants(participants: Participant[], shape: TableShape): Participant[] {
-  const positions = getDefaultPositions(participants.length, shape);
-  return participants.map((p, idx) => ({
-    ...p,
-    x: positions[idx]?.x ?? p.x,
-    y: positions[idx]?.y ?? p.y,
-  }));
+export function redistributeWithFacilitator(
+  participants: Participant[],
+  shape: TableShape,
+  includeFacilitator = true
+): { participants: Participant[]; facilitatorSeat: FacilitatorSeat } {
+  const { participantPositions, facilitatorSeat } = getDefaultLayoutWithFacilitator(
+    participants.length,
+    shape,
+    includeFacilitator
+  );
+  return {
+    participants: participants.map((p, idx) => ({
+      ...p,
+      x: participantPositions[idx]?.x ?? p.x,
+      y: participantPositions[idx]?.y ?? p.y,
+    })),
+    facilitatorSeat,
+  };
 }
 
-export function findEmptySeatPosition(existing: Participant[], shape: TableShape): { x: number; y: number } {
-  const targetCount = Math.min(MAX_PARTICIPANTS, Math.max(MIN_PARTICIPANTS, existing.length + 1));
+export function findEmptySeatPosition(
+  existing: Array<{ x: number; y: number }>,
+  shape: TableShape
+): { x: number; y: number } {
+  const targetCount = Math.min(MAX_PARTICIPANTS + 1, Math.max(MIN_PARTICIPANTS, existing.length + 1));
   const candidates = [
     ...getDefaultPositions(targetCount, shape),
-    ...getDefaultPositions(MAX_PARTICIPANTS, shape),
+    ...getDefaultPositions(MAX_PARTICIPANTS + 1, shape),
     { x: 20, y: 20 },
     { x: 80, y: 20 },
     { x: 20, y: 80 },
@@ -142,8 +182,16 @@ export function findEmptySeatPosition(existing: Participant[], shape: TableShape
   return best;
 }
 
-export function createParticipant(existing: Participant[], shape: TableShape): Participant {
-  const pos = findEmptySeatPosition(existing, shape);
+export function createParticipant(
+  existing: Participant[],
+  shape: TableShape,
+  facilitatorSeat?: FacilitatorSeat,
+  showFacilitatorSeat = true
+): Participant {
+  const occupied: Array<{ x: number; y: number }> = showFacilitatorSeat && facilitatorSeat
+    ? [...existing, facilitatorSeat]
+    : existing;
+  const pos = findEmptySeatPosition(occupied, shape);
   const nextIndex = existing.length + 1;
   return {
     id: `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
@@ -159,14 +207,29 @@ export function loadBalanceSettings(): BalanceSettings {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<BalanceSettings>;
       const tableShape: TableShape = parsed.tableShape === 'circle' ? 'circle' : 'rect';
-      const participants = Array.isArray(parsed.participants) && parsed.participants.length >= MIN_PARTICIPANTS
-        ? parsed.participants.slice(0, MAX_PARTICIPANTS).map((p, idx) => ({
-            id: typeof p.id === 'string' && p.id ? p.id : `p_${idx + 1}`,
-            name: typeof p.name === 'string' && p.name.trim() ? p.name : `참여자 ${idx + 1}`,
-            x: typeof p.x === 'number' ? snapPercent(p.x, 8, 92) : 50,
-            y: typeof p.y === 'number' ? snapPercent(p.y, 10, 90) : 50,
-          }))
-        : getDefaultParticipants(6, tableShape);
+      const showFacilitatorSeat =
+        typeof parsed.showFacilitatorSeat === 'boolean' ? parsed.showFacilitatorSeat : true;
+
+      const participants =
+        Array.isArray(parsed.participants) && parsed.participants.length >= MIN_PARTICIPANTS
+          ? parsed.participants.slice(0, MAX_PARTICIPANTS).map((p, idx) => ({
+              id: typeof p.id === 'string' && p.id ? p.id : `p_${idx + 1}`,
+              name: typeof p.name === 'string' && p.name.trim() ? p.name : `참여자 ${idx + 1}`,
+              x: typeof p.x === 'number' ? snapPercent(p.x, 8, 92) : 50,
+              y: typeof p.y === 'number' ? snapPercent(p.y, 10, 90) : 50,
+            }))
+          : getDefaultParticipants(6, tableShape);
+
+      const facilitatorSeat: FacilitatorSeat =
+        parsed.facilitatorSeat &&
+        typeof parsed.facilitatorSeat.x === 'number' &&
+        typeof parsed.facilitatorSeat.y === 'number'
+          ? {
+              x: snapPercent(parsed.facilitatorSeat.x, 8, 92),
+              y: snapPercent(parsed.facilitatorSeat.y, 10, 90),
+            }
+          : findEmptySeatPosition(participants, tableShape);
+
       const recommendedTurnSec =
         typeof parsed.recommendedTurnSec === 'number' && parsed.recommendedTurnSec >= 30
           ? parsed.recommendedTurnSec
@@ -175,14 +238,33 @@ export function loadBalanceSettings(): BalanceSettings {
         typeof parsed.goalMinutes === 'number' && parsed.goalMinutes >= 5 && parsed.goalMinutes <= 360
           ? parsed.goalMinutes
           : 60;
-      return { participants, tableShape, recommendedTurnSec, goalMinutes };
+
+      return {
+        participants,
+        facilitatorSeat,
+        showFacilitatorSeat,
+        tableShape,
+        recommendedTurnSec,
+        goalMinutes,
+      };
     }
   } catch {
     // Fallback to defaults if localStorage is unavailable or corrupted
   }
+
+  const defaultShape: TableShape = 'rect';
+  const defaultParticipants = getDefaultParticipants(6, defaultShape);
+  const { facilitatorSeat } = getDefaultLayoutWithFacilitator(
+    defaultParticipants.length,
+    defaultShape,
+    true
+  );
+
   return {
-    participants: getDefaultParticipants(6, 'rect'),
-    tableShape: 'rect',
+    participants: defaultParticipants,
+    facilitatorSeat,
+    showFacilitatorSeat: true,
+    tableShape: defaultShape,
     recommendedTurnSec: 120,
     goalMinutes: 60,
   };

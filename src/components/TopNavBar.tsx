@@ -79,7 +79,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
 
   return (
     <>
-      <header className="landscape-compact-header relative z-30 h-10 min-h-[40px] w-full shrink-0 border-b border-stone-200 bg-white sm:h-11 sm:min-h-[44px]">
+      <header className="landscape-compact-header relative z-30 min-h-[44px] w-full shrink-0 border-b border-stone-200 bg-white py-1">
         <div className="mx-auto flex h-full max-w-[1600px] items-center justify-between gap-1.5 px-2 sm:px-4">
           {/* Left: Primary Tab Navigation */}
           <nav
@@ -89,19 +89,19 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
             <button
               type="button"
               onClick={() => onNavigate('balance')}
-              className={`flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition-all sm:px-3 sm:py-1 sm:text-xs ${
+              className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-semibold transition-all ${
                 activeTab === 'balance'
                   ? 'bg-lime-700 text-white shadow-xs'
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
               <Users className="h-3.5 w-3.5 shrink-0" />
-              <span>발언 균형</span>
+              <span>모두의 목소리</span>
             </button>
             <button
               type="button"
               onClick={() => onNavigate('timer')}
-              className={`flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition-all sm:px-3 sm:py-1 sm:text-xs ${
+              className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-semibold transition-all ${
                 activeTab === 'timer'
                   ? 'bg-lime-700 text-white shadow-xs'
                   : 'text-stone-600 hover:text-stone-900'
@@ -316,7 +316,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
       {showGoalPopover &&
         createPortal(
           <div
-            className="fixed inset-0 z-50 flex items-start justify-end bg-stone-900/20 p-2 pt-11 sm:p-4 sm:pt-12"
+            className="fixed inset-0 z-50 flex items-start justify-end bg-stone-900/20 p-2 pt-14 sm:p-4 sm:pt-16"
             onClick={() => setShowGoalPopover(false)}
           >
             <div

@@ -6,9 +6,29 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { playTimerChime } from '../lib/audioRecorder';
+import {
+  playSound,
+  SOUND_OPTIONS,
+  SoundId,
+  stopSound,
+  unlockAudio,
+} from '../lib/soundEngine';
 
 export type TimerSubMode = 'countdown' | 'clock';
+
+const SOUND_STORAGE_KEY = 'allvoices_timer_sound_v1';
+
+function loadSavedSoundId(): SoundId {
+  try {
+    const saved = localStorage.getItem(SOUND_STORAGE_KEY);
+    if (saved && SOUND_OPTIONS.some((s) => s.id === saved)) {
+      return saved as SoundId;
+    }
+  } catch {
+    // Ignore storage access errors
+  }
+  return 'crystal_bowl';
+}
 
 interface TimerContextValue {
   subMode: TimerSubMode;
@@ -18,12 +38,17 @@ interface TimerContextValue {
   isFinished: boolean;
   isMuted: boolean;
   isFullscreen: boolean;
+  selectedSoundId: SoundId;
+  isPreviewing: boolean;
   setSubMode: (mode: TimerSubMode) => void;
   setPresetDuration: (seconds: number) => void;
+  setSelectedSoundId: (id: SoundId) => void;
   startCountdown: () => void;
   pauseCountdown: () => void;
   resetCountdown: () => void;
   toggleMute: () => void;
+  togglePreview: () => void;
+  stopPreview: () => void;
   toggleFullscreen: () => Promise<void>;
   exitFullscreen: () => Promise<void>;
 }
@@ -32,17 +57,21 @@ const TimerContext = createContext<TimerContextValue | null>(null);
 
 export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [subMode, setSubMode] = useState<TimerSubMode>('countdown');
-  const [durationSec, setDurationSec] = useState<number>(300); // default 5 min
+  const [durationSec, setDurationSec] = useState<number>(300);
   const [remainingSec, setRemainingSec] = useState<number>(300);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isFinished, setIsFinished] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [selectedSoundId, setSelectedSoundIdState] = useState<SoundId>(loadSavedSoundId);
+  const [isPreviewing, setIsPreviewing] = useState<boolean>(false);
   const [isInAppFullscreen, setIsInAppFullscreen] = useState<boolean>(false);
   const [isNativeFullscreen, setIsNativeFullscreen] = useState<boolean>(false);
 
   const endPerfMsRef = useRef<number>(0);
   const isMutedRef = useRef<boolean>(isMuted);
   isMutedRef.current = isMuted;
+  const selectedSoundRef = useRef<SoundId>(selectedSoundId);
+  selectedSoundRef.current = selectedSoundId;
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -78,7 +107,8 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setIsRunning(false);
         setIsFinished(true);
         if (!isMutedRef.current) {
-          playTimerChime();
+          setIsPreviewing(false);
+          playSound(selectedSoundRef.current);
         }
       } else {
         setRemainingSec(Math.ceil(leftMs / 1000));
@@ -90,6 +120,40 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [isRunning]);
 
+  const stopPreview = useCallback(() => {
+    stopSound();
+    setIsPreviewing(false);
+  }, []);
+
+  const setSelectedSoundId = useCallback(
+    (id: SoundId) => {
+      setSelectedSoundIdState(id);
+      try {
+        localStorage.setItem(SOUND_STORAGE_KEY, id);
+      } catch {
+        // Ignore
+      }
+      if (isPreviewing) {
+        stopSound();
+        setIsPreviewing(false);
+      }
+    },
+    [isPreviewing]
+  );
+
+  const togglePreview = useCallback(() => {
+    if (isPreviewing) {
+      stopSound();
+      setIsPreviewing(false);
+      return;
+    }
+    unlockAudio();
+    setIsPreviewing(true);
+    playSound(selectedSoundRef.current, () => {
+      setIsPreviewing(false);
+    });
+  }, [isPreviewing]);
+
   const setPresetDuration = useCallback((seconds: number) => {
     const safe = Math.max(1, Math.min(36000, Math.round(seconds)));
     setIsRunning(false);
@@ -99,6 +163,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const startCountdown = useCallback(() => {
+    unlockAudio();
     if (remainingSec <= 0) {
       endPerfMsRef.current = performance.now() + durationSec * 1000;
       setRemainingSec(durationSec);
@@ -117,13 +182,22 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [isRunning]);
 
   const resetCountdown = useCallback(() => {
+    stopSound();
+    setIsPreviewing(false);
     setIsRunning(false);
     setIsFinished(false);
     setRemainingSec(durationSec);
   }, [durationSec]);
 
   const toggleMute = useCallback(() => {
-    setIsMuted((prev) => !prev);
+    setIsMuted((prev) => {
+      const next = !prev;
+      if (next) {
+        stopSound();
+        setIsPreviewing(false);
+      }
+      return next;
+    });
   }, []);
 
   const exitFullscreen = useCallback(async () => {
@@ -167,12 +241,17 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     isFinished,
     isMuted,
     isFullscreen,
+    selectedSoundId,
+    isPreviewing,
     setSubMode,
     setPresetDuration,
+    setSelectedSoundId,
     startCountdown,
     pauseCountdown,
     resetCountdown,
     toggleMute,
+    togglePreview,
+    stopPreview,
     toggleFullscreen,
     exitFullscreen,
   };

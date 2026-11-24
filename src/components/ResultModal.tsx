@@ -79,7 +79,9 @@ export const ResultModal: React.FC = () => {
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-lime-800" />
               <h2 className="text-base font-bold text-stone-900">
-                {isRecovered ? '복구된 세션 결과 리포트' : '세션 결과 리포트'}
+                {isRecovered
+                  ? '모두의 목소리 · 복구된 세션 결과 리포트'
+                  : '모두의 목소리 · 세션 결과 리포트'}
               </h2>
             </div>
             <p className="mt-0.5 text-xs text-stone-600 tabular-nums">

@@ -15,6 +15,11 @@ export interface Participant {
   y: number; // 0..100 percent of canvas height
 }
 
+export interface FacilitatorSeat {
+  x: number;
+  y: number;
+}
+
 export interface TimelineEntry {
   turn: number;
   speakerId: string; // 'facilitator' or participant.id
@@ -74,6 +79,8 @@ export interface ParticipantStat {
 
 export interface BalanceSettings {
   participants: Participant[];
+  facilitatorSeat: FacilitatorSeat;
+  showFacilitatorSeat: boolean;
   tableShape: TableShape;
   recommendedTurnSec: number;
   goalMinutes: number;

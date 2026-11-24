@@ -10,6 +10,7 @@ import React, {
 import {
   AudioPartBlob,
   BalanceMode,
+  FacilitatorSeat,
   Participant,
   PausedRange,
   SessionRecord,
@@ -23,7 +24,7 @@ import {
   loadBalanceSettings,
   MAX_PARTICIPANTS,
   MIN_PARTICIPANTS,
-  redistributeParticipants,
+  redistributeWithFacilitator,
   saveBalanceSettings,
   snapPercent,
 } from '../lib/layoutUtils';
@@ -81,6 +82,8 @@ interface SessionEngineState {
 
 interface SessionContextValue {
   participants: Participant[];
+  facilitatorSeat: FacilitatorSeat;
+  showFacilitatorSeat: boolean;
   tableShape: TableShape;
   mode: BalanceMode;
   recommendedTurnSec: number;
@@ -101,6 +104,7 @@ interface SessionContextValue {
   toastMessage: string | null;
   setMode: (mode: BalanceMode) => void;
   setTableShape: (shape: TableShape) => void;
+  setShowFacilitatorSeat: (show: boolean) => void;
   setRecommendedTurnSec: (sec: number) => void;
   setGoalMinutes: (mins: number) => void;
   setRecordingEnabled: (enabled: boolean) => void;
@@ -108,11 +112,13 @@ interface SessionContextValue {
   removeParticipant: (id: string) => void;
   renameParticipant: (id: string, name: string) => void;
   moveParticipant: (id: string, x: number, y: number) => void;
+  moveFacilitatorSeat: (x: number, y: number) => void;
   resetLayout: () => void;
   startSession: () => Promise<void>;
   pauseSession: () => void;
   resumeSession: () => void;
   selectSpeaker: (participantId: string) => void;
+  switchToFacilitator: () => void;
   undoLastSwitch: () => void;
   endSession: () => Promise<void>;
   closeResultModal: () => void;
@@ -152,6 +158,12 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const initialSettings = useMemo(() => loadBalanceSettings(), []);
 
   const [participants, setParticipants] = useState<Participant[]>(initialSettings.participants);
+  const [facilitatorSeat, setFacilitatorSeat] = useState<FacilitatorSeat>(
+    initialSettings.facilitatorSeat
+  );
+  const [showFacilitatorSeat, setShowFacilitatorSeat] = useState<boolean>(
+    initialSettings.showFacilitatorSeat
+  );
   const [tableShape, setTableShapeState] = useState<TableShape>(initialSettings.tableShape);
   const [recommendedTurnSec, setRecommendedTurnSecState] = useState<number>(
     initialSettings.recommendedTurnSec
@@ -197,11 +209,13 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     saveBalanceSettings({
       participants,
+      facilitatorSeat,
+      showFacilitatorSeat,
       tableShape,
       recommendedTurnSec,
       goalMinutes,
     });
-  }, [participants, tableShape, recommendedTurnSec, goalMinutes]);
+  }, [participants, facilitatorSeat, showFacilitatorSeat, tableShape, recommendedTurnSec, goalMinutes]);
 
   // Check IndexedDB on mount for any interrupted/uncompleted session
   useEffect(() => {
@@ -501,10 +515,19 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     syncUiFromEngine,
   ]);
 
-  const setTableShape = useCallback((shape: TableShape) => {
-    setTableShapeState(shape);
-    setParticipants((prev) => redistributeParticipants(prev, shape));
-  }, []);
+  const setTableShape = useCallback(
+    (shape: TableShape) => {
+      setTableShapeState(shape);
+      const next = redistributeWithFacilitator(
+        participantsRef.current,
+        shape,
+        showFacilitatorSeat
+      );
+      setParticipants(next.participants);
+      setFacilitatorSeat(next.facilitatorSeat);
+    },
+    [showFacilitatorSeat]
+  );
 
   const setRecommendedTurnSec = useCallback((sec: number) => {
     setRecommendedTurnSecState(Math.max(30, sec));
@@ -531,9 +554,9 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         showToast(`참여자는 최대 ${MAX_PARTICIPANTS}명까지 추가할 수 있습니다.`);
         return prev;
       }
-      return [...prev, createParticipant(prev, tableShape)];
+      return [...prev, createParticipant(prev, tableShape, facilitatorSeat, showFacilitatorSeat)];
     });
-  }, [showToast, tableShape]);
+  }, [facilitatorSeat, showFacilitatorSeat, showToast, tableShape]);
 
   const removeParticipant = useCallback(
     (id: string) => {
@@ -571,10 +594,22 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   }, []);
 
+  const moveFacilitatorSeat = useCallback((x: number, y: number) => {
+    const snappedX = snapPercent(x, 8, 92);
+    const snappedY = snapPercent(y, 10, 90);
+    setFacilitatorSeat({ x: snappedX, y: snappedY });
+  }, []);
+
   const resetLayout = useCallback(() => {
-    setParticipants((prev) => redistributeParticipants(prev, tableShape));
+    const next = redistributeWithFacilitator(
+      participantsRef.current,
+      tableShape,
+      showFacilitatorSeat
+    );
+    setParticipants(next.participants);
+    setFacilitatorSeat(next.facilitatorSeat);
     showToast('좌석 배치를 기본 위치로 정리했습니다.');
-  }, [showToast, tableShape]);
+  }, [showFacilitatorSeat, showToast, tableShape]);
 
   const startSession = useCallback(async () => {
     if (engineRef.current.status === 'running' || engineRef.current.status === 'paused') {
@@ -729,6 +764,25 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     },
     [closeCurrentTurnAndSwitch, persistSnapshotToIdb, showToast, syncEngineClock, syncUiFromEngine]
   );
+
+  const switchToFacilitator = useCallback(() => {
+    const eng = engineRef.current;
+    if (eng.status === 'idle') {
+      showToast('상단의 [시작] 버튼을 눌러 세션을 시작해 주세요.');
+      return;
+    }
+    if (eng.status === 'paused') {
+      showToast('일시정지 상태입니다. [재개] 후 전환해 주세요.');
+      return;
+    }
+    if (eng.status !== 'running') return;
+    if (eng.activeSpeakerId === 'facilitator') return;
+
+    syncEngineClock();
+    closeCurrentTurnAndSwitch('facilitator', '진행자');
+    syncUiFromEngine();
+    persistSnapshotToIdb(true);
+  }, [closeCurrentTurnAndSwitch, persistSnapshotToIdb, showToast, syncEngineClock, syncUiFromEngine]);
 
   const undoLastSwitch = useCallback(() => {
     const eng = engineRef.current;
@@ -924,6 +978,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const value: SessionContextValue = {
     participants,
+    facilitatorSeat,
+    showFacilitatorSeat,
     tableShape,
     mode,
     recommendedTurnSec,
@@ -944,6 +1000,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     toastMessage,
     setMode,
     setTableShape,
+    setShowFacilitatorSeat,
     setRecommendedTurnSec,
     setGoalMinutes,
     setRecordingEnabled,
@@ -951,11 +1008,13 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     removeParticipant,
     renameParticipant,
     moveParticipant,
+    moveFacilitatorSeat,
     resetLayout,
     startSession,
     pauseSession,
     resumeSession,
     selectSpeaker,
+    switchToFacilitator,
     undoLastSwitch,
     endSession,
     closeResultModal,

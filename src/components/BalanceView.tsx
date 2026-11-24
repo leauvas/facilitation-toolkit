@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import {
   Circle,
   Download,
+  Mic,
   Plus,
   RotateCcw,
   Square as RectIcon,
@@ -12,6 +13,7 @@ import { MAX_PARTICIPANTS, MIN_PARTICIPANTS } from '../lib/layoutUtils';
 import { formatClockMMSS } from '../lib/exportUtils';
 import { HourglassSvg } from './HourglassSvg';
 import { ParticipantCard } from './ParticipantCard';
+import { FacilitatorCard } from './FacilitatorCard';
 
 interface BalanceViewProps {
   confirmEndOpen: boolean;
@@ -33,6 +35,9 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
 }) => {
   const {
     participants,
+    facilitatorSeat,
+    showFacilitatorSeat,
+    setShowFacilitatorSeat,
     tableShape,
     setTableShape,
     mode,
@@ -52,8 +57,10 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
     removeParticipant,
     renameParticipant,
     moveParticipant,
+    moveFacilitatorSeat,
     resetLayout,
     selectSpeaker,
+    switchToFacilitator,
     recoverUnfinishedSession,
     discardUnfinishedBackup,
   } = useSession();
@@ -147,8 +154,8 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
                 : ''
             } ${
               tableShape === 'circle'
-                ? 'aspect-square h-[142px] rounded-full sm:h-[196px] md:h-[224px] [@media(max-height:450px)]:h-[118px]'
-                : 'h-[38%] w-[46%] min-h-[116px] min-w-[164px] max-h-[228px] max-w-[332px] rounded-3xl [@media(max-height:450px)]:h-[112px] [@media(max-height:450px)]:min-h-[104px]'
+                ? 'aspect-square h-[142px] rounded-full sm:h-[196px] md:h-[224px] [@media(max-height:450px)]:h-[104px]'
+                : 'h-[38%] w-[46%] min-h-[116px] min-w-[164px] max-h-[228px] max-w-[332px] rounded-3xl [@media(max-height:450px)]:h-[98px] [@media(max-height:450px)]:min-h-[96px]'
             }`}
           >
             <HourglassSvg
@@ -207,6 +214,21 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
               ))}
             </div>
           </div>
+
+          {/* Fixed Facilitator Seat (N+1) */}
+          {showFacilitatorSeat && (
+            <FacilitatorCard
+              seat={facilitatorSeat}
+              totalSec={facilitatorTotalSec}
+              isSpeaking={activeSpeakerId === 'facilitator'}
+              mode={mode}
+              sessionStatus={sessionStatus}
+              isCompactCount={participants.length >= 9}
+              canvasRef={canvasRef}
+              onSelect={switchToFacilitator}
+              onMove={moveFacilitatorSeat}
+            />
+          )}
 
           {/* Participant Cards around the table */}
           {participants.map((p) => (
@@ -296,6 +318,21 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
                 <span>배치 초기화</span>
               </button>
             )}
+
+            {/* Toggle Facilitator Seat Visibility */}
+            <button
+              type="button"
+              onClick={() => setShowFacilitatorSeat(!showFacilitatorSeat)}
+              className={`flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold transition ${
+                showFacilitatorSeat
+                  ? 'border-stone-400 bg-stone-200 text-stone-800'
+                  : 'border-stone-200 bg-white text-stone-500 hover:text-stone-800'
+              }`}
+              title="진행자 자리 표시 ON/OFF"
+            >
+              <Mic className="h-2.5 w-2.5" />
+              <span>진행자 자리</span>
+            </button>
           </div>
 
           {/* Legend */}
