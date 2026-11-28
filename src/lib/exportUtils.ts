@@ -35,6 +35,10 @@ export function buildTimelineText(timeline: TimelineEntry[]): string {
       if (entry.speakerId === 'facilitator' || entry.speaker === '진행자') {
         return `[${startLabel} - ${endLabel}] 진행자`;
       }
+      if (entry.isContinuation) {
+        const currentTurn = Math.max(1, speakerTurnCounts.get(entry.speakerId) ?? 1);
+        return `[${startLabel} - ${endLabel}] ${entry.speaker} (발언 #${currentTurn} 이어서)`;
+      }
       const nextTurn = (speakerTurnCounts.get(entry.speakerId) ?? 0) + 1;
       speakerTurnCounts.set(entry.speakerId, nextTurn);
       return `[${startLabel} - ${endLabel}] ${entry.speaker} (발언 #${nextTurn})`;
@@ -98,7 +102,9 @@ export function computeParticipantStats(
       facilitatorTotalSec += entry.durationSec;
     } else {
       totals.set(entry.speakerId, (totals.get(entry.speakerId) ?? 0) + entry.durationSec);
-      turns.set(entry.speakerId, (turns.get(entry.speakerId) ?? 0) + 1);
+      if (!entry.isContinuation) {
+        turns.set(entry.speakerId, (turns.get(entry.speakerId) ?? 0) + 1);
+      }
     }
   }
 
@@ -181,5 +187,5 @@ export function triggerFileDownload(content: Blob | string, filename: string, mi
   setTimeout(() => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, 1000);
+  }, 60000);
 }

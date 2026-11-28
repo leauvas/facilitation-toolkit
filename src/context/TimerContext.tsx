@@ -68,10 +68,62 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isNativeFullscreen, setIsNativeFullscreen] = useState<boolean>(false);
 
   const endPerfMsRef = useRef<number>(0);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const isMutedRef = useRef<boolean>(isMuted);
   isMutedRef.current = isMuted;
   const selectedSoundRef = useRef<SoundId>(selectedSoundId);
   selectedSoundRef.current = selectedSoundId;
+
+  const isFullscreen = isNativeFullscreen || isInAppFullscreen;
+  const shouldKeepAwake = isRunning || subMode === 'clock' || isFullscreen;
+
+  // Keep screen awake during countdown, desk clock, or fullscreen mode
+  useEffect(() => {
+    let active = true;
+
+    const acquireWakeLock = async () => {
+      if (!active || !shouldKeepAwake) return;
+      try {
+        if ('wakeLock' in navigator && navigator.wakeLock) {
+          if (!wakeLockRef.current || wakeLockRef.current.released) {
+            wakeLockRef.current = await navigator.wakeLock.request('screen');
+          }
+        }
+      } catch {
+        // Ignore wake lock errors on unsupported devices or low power mode
+      }
+    };
+
+    const releaseWakeLock = async () => {
+      try {
+        if (wakeLockRef.current && !wakeLockRef.current.released) {
+          await wakeLockRef.current.release();
+        }
+      } catch {
+        // Ignore
+      }
+      wakeLockRef.current = null;
+    };
+
+    if (shouldKeepAwake) {
+      void acquireWakeLock();
+    } else {
+      void releaseWakeLock();
+    }
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && shouldKeepAwake) {
+        void acquireWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      active = false;
+      document.removeEventListener('visibilitychange', onVisibility);
+      void releaseWakeLock();
+    };
+  }, [shouldKeepAwake]);
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -230,8 +282,6 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
     setIsInAppFullscreen(true);
   }, [exitFullscreen, isInAppFullscreen, isNativeFullscreen]);
-
-  const isFullscreen = isNativeFullscreen || isInAppFullscreen;
 
   const value: TimerContextValue = {
     subMode,

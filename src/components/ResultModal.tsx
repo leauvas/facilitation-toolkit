@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   CheckCircle2,
   ClipboardCopy,
@@ -24,8 +24,18 @@ import {
 
 export const ResultModal: React.FC = () => {
   const { resultModal, closeResultModal, showToast } = useSession();
+  const [confirmClose, setConfirmClose] = useState(false);
 
   if (!resultModal) return null;
+
+  const handleRequestClose = () => {
+    setConfirmClose(true);
+  };
+
+  const handleConfirmClose = () => {
+    setConfirmClose(false);
+    closeResultModal();
+  };
 
   const { record, audioParts, isRecovered } = resultModal;
   const prefix = formatFilePrefix(record.sessionStartedAt);
@@ -91,13 +101,37 @@ export const ResultModal: React.FC = () => {
           </div>
           <button
             type="button"
-            onClick={closeResultModal}
+            onClick={handleRequestClose}
             className="rounded-full p-1.5 text-stone-600 transition hover:bg-stone-100 hover:text-stone-900"
             aria-label="결과 모달 닫기"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
+
+        {confirmClose && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-orange-300 bg-orange-50 px-4 py-2.5 text-xs">
+            <span className="font-semibold text-orange-800">
+              결과 창을 닫으시겠습니까? 닫아도 하단 [최근 결과] 버튼으로 다시 열 수 있습니다.
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setConfirmClose(false)}
+                className="rounded-full border border-stone-200 bg-white px-3 py-1 font-semibold text-stone-700 hover:bg-stone-100"
+              >
+                머무르기
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmClose}
+                className="rounded-full bg-orange-600 px-3 py-1 font-semibold text-white hover:bg-orange-700"
+              >
+                닫기 확인
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Modal Body */}
         <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">

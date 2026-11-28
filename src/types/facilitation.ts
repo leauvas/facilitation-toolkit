@@ -30,6 +30,7 @@ export interface TimelineEntry {
   audioPart: number; // 1-based recording part index
   partStartSec: number; // offset within audioPart file (2 decimals)
   partEndSec: number;
+  isContinuation?: boolean; // true when split across audioPart boundaries
 }
 
 export interface PausedRange {

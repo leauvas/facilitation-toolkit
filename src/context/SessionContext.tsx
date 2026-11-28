@@ -37,8 +37,10 @@ import {
 import {
   appendAudioChunk,
   deleteSessionData,
+  getLatestCompletedSession,
   getSessionAudioParts,
   getUnfinishedSession,
+  pruneOldCompletedSessions,
   saveSessionMeta,
 } from '../lib/indexedDb';
 import { round2 } from '../lib/exportUtils';
@@ -72,6 +74,7 @@ interface SessionEngineState {
   currentAudioPart: number;
   activeTurnStartAudioSec: number;
   activeTurnStartPartSec: number;
+  activeTurnIsContinuation: boolean;
   lastTickPerfMs: number;
   timeline: TimelineEntry[];
   pausedRanges: PausedRange[];
@@ -100,6 +103,7 @@ interface SessionContextValue {
   timeline: TimelineEntry[];
   participantMetrics: Record<string, LiveParticipantMetrics>;
   recoverableSession: SessionRecord | null;
+  lastCompletedSession: SessionRecord | null;
   resultModal: ResultModalPayload | null;
   toastMessage: string | null;
   setMode: (mode: BalanceMode) => void;
@@ -130,6 +134,7 @@ interface SessionContextValue {
   endSession: () => Promise<void>;
   closeResultModal: () => void;
   recoverUnfinishedSession: () => Promise<void>;
+  reopenLastSession: () => Promise<void>;
   discardUnfinishedBackup: () => Promise<void>;
   showToast: (msg: string) => void;
 }
@@ -152,6 +157,7 @@ function createEmptyEngine(): SessionEngineState {
     currentAudioPart: 1,
     activeTurnStartAudioSec: 0,
     activeTurnStartPartSec: 0,
+    activeTurnIsContinuation: false,
     lastTickPerfMs: 0,
     timeline: [],
     pausedRanges: [],
@@ -184,9 +190,11 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [activeSpeakerName, setActiveSpeakerName] = useState<string>('진행자');
   const [elapsedAudioSec, setElapsedAudioSec] = useState<number>(0);
   const [currentTurnElapsedSec, setCurrentTurnElapsedSec] = useState<number>(0);
+  const [activeTurnIsContinuation, setActiveTurnIsContinuation] = useState<boolean>(false);
   const [timelineSnapshot, setTimelineSnapshot] = useState<TimelineEntry[]>([]);
 
   const [recoverableSession, setRecoverableSession] = useState<SessionRecord | null>(null);
+  const [lastCompletedSession, setLastCompletedSession] = useState<SessionRecord | null>(null);
   const [resultModal, setResultModal] = useState<ResultModalPayload | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -196,6 +204,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const engineRef = useRef<SessionEngineState>(createEmptyEngine());
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const intentionalStopRef = useRef<boolean>(false);
   const chunkSeqRef = useRef<number>(0);
   const recorderStopPromiseRef = useRef<Promise<void> | null>(null);
   const wakeKeepAliveRef = useRef<WakeKeepAlive>(new WakeKeepAlive());
@@ -224,12 +233,17 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [participants, facilitatorSeat, showFacilitatorSeat, tableShape, recommendedTurnSec, goalMinutes]);
 
-  // Check IndexedDB on mount for any interrupted/uncompleted session
+  // Check IndexedDB on mount for any interrupted/uncompleted or latest completed session
   useEffect(() => {
     let mounted = true;
     void getUnfinishedSession().then((sess) => {
       if (mounted && sess) {
         setRecoverableSession(sess);
+      }
+    });
+    void getLatestCompletedSession().then((sess) => {
+      if (mounted && sess) {
+        setLastCompletedSession(sess);
       }
     });
     return () => {
@@ -256,6 +270,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setActiveSpeakerName(eng.activeSpeakerName);
     setElapsedAudioSec(eng.elapsedAudioSec);
     setCurrentTurnElapsedSec(Math.max(0, eng.elapsedAudioSec - eng.activeTurnStartAudioSec));
+    setActiveTurnIsContinuation(eng.activeTurnIsContinuation);
     setTimelineSnapshot([...eng.timeline]);
   }, []);
 
@@ -279,6 +294,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
             audioPart: eng.currentAudioPart,
             partStartSec,
             partEndSec,
+            ...(eng.activeTurnIsContinuation ? { isContinuation: true } : {}),
           });
         }
       }
@@ -313,68 +329,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [buildSnapshotRecord]
   );
 
-  const startRecorderForPart = useCallback((stream: MediaStream, mimeType: string, part: number) => {
-    const eng = engineRef.current;
-    const options: MediaRecorderOptions = mimeType ? { mimeType } : {};
-    const recorder = new MediaRecorder(stream, options);
-    const effectiveMime = recorder.mimeType || mimeType || 'audio/webm';
-    eng.audioMimeType = effectiveMime;
-
-    let resolveStop!: () => void;
-    recorderStopPromiseRef.current = new Promise<void>((res) => {
-      resolveStop = res;
-    });
-
-    recorder.ondataavailable = (ev: BlobEvent) => {
-      if (ev.data && ev.data.size > 0 && eng.sessionId) {
-        const seq = chunkSeqRef.current++;
-        void appendAudioChunk({
-          sessionId: eng.sessionId,
-          part,
-          mimeType: effectiveMime,
-          seq,
-          blob: ev.data,
-          createdAt: Date.now(),
-        }).catch(() => {
-          // Ignore chunk write errors
-        });
-      }
-    };
-
-    recorder.onstop = () => {
-      resolveStop();
-    };
-
-    recorder.onerror = () => {
-      resolveStop();
-    };
-
-    recorderRef.current = recorder;
-    recorder.start(1000);
-  }, []);
-
-  const stopCurrentRecorder = useCallback(async () => {
-    const recorder = recorderRef.current;
-    if (!recorder) return;
-    if (recorder.state !== 'inactive') {
-      const stopPromise = recorderStopPromiseRef.current;
-      try {
-        recorder.stop();
-      } catch {
-        // Ignore if already stopped
-      }
-      if (stopPromise) {
-        await Promise.race([
-          stopPromise,
-          new Promise<void>((resolve) => window.setTimeout(resolve, 1500)),
-        ]);
-      }
-    }
-    recorderRef.current = null;
-  }, []);
-
   const closeCurrentTurnAndSwitch = useCallback(
-    (nextSpeakerId: string, nextSpeakerName: string) => {
+    (nextSpeakerId: string, nextSpeakerName: string, nextIsContinuation = false) => {
       const eng = engineRef.current;
       const startSec = round2(eng.activeTurnStartAudioSec);
       const endSec = round2(eng.elapsedAudioSec);
@@ -392,6 +348,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         audioPart: eng.currentAudioPart,
         partStartSec,
         partEndSec,
+        ...(eng.activeTurnIsContinuation ? { isContinuation: true } : {}),
       });
 
       eng.activeTurnNumber += 1;
@@ -399,9 +356,117 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       eng.activeSpeakerName = nextSpeakerName;
       eng.activeTurnStartAudioSec = eng.elapsedAudioSec;
       eng.activeTurnStartPartSec = eng.partElapsedSec;
+      eng.activeTurnIsContinuation = nextIsContinuation;
     },
     []
   );
+
+  const startRecorderForPart = useCallback(
+    (stream: MediaStream, mimeType: string, part: number) => {
+      const eng = engineRef.current;
+      const options: MediaRecorderOptions = mimeType ? { mimeType } : {};
+      const recorder = new MediaRecorder(stream, options);
+      const effectiveMime = recorder.mimeType || mimeType || 'audio/webm';
+      eng.audioMimeType = effectiveMime;
+
+      let resolveStop!: () => void;
+      recorderStopPromiseRef.current = new Promise<void>((res) => {
+        resolveStop = res;
+      });
+
+      recorder.ondataavailable = (ev: BlobEvent) => {
+        if (ev.data && ev.data.size > 0 && eng.sessionId) {
+          const seq = chunkSeqRef.current++;
+          void appendAudioChunk({
+            sessionId: eng.sessionId,
+            part,
+            mimeType: effectiveMime,
+            seq,
+            blob: ev.data,
+            createdAt: Date.now(),
+          }).catch(() => {
+            // Ignore chunk write errors
+          });
+        }
+      };
+
+      recorder.onstop = () => {
+        resolveStop();
+        const wasIntentional = intentionalStopRef.current;
+        intentionalStopRef.current = false;
+
+        // Detect unexpected OS interruption while running in foreground (e.g. phone call / Siri)
+        if (!wasIntentional && eng.status === 'running' && !eng.isBackgroundPaused && eng.recordingActive) {
+          void (async () => {
+            syncEngineClock();
+            if (eng.elapsedAudioSec > eng.activeTurnStartAudioSec) {
+              closeCurrentTurnAndSwitch(eng.activeSpeakerId, eng.activeSpeakerName, true);
+            }
+            eng.currentAudioPart += 1;
+            eng.partElapsedSec = 0;
+            eng.activeTurnStartPartSec = 0;
+
+            let activeStream = streamRef.current;
+            const hasLiveTrack = activeStream?.getAudioTracks().some((t) => t.readyState === 'live');
+            if (!hasLiveTrack && navigator.mediaDevices?.getUserMedia) {
+              try {
+                activeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                streamRef.current = activeStream;
+              } catch {
+                eng.recordingActive = false;
+                setRecordingEnabledState(false);
+                showToast('녹음이 중단되어 마이크 재연결에 실패했습니다. 발언 기록만 계속됩니다.');
+                syncUiFromEngine();
+                persistSnapshotToIdb(true);
+                return;
+              }
+            }
+            if (activeStream && eng.recordingActive && eng.status === 'running') {
+              try {
+                startRecorderForPart(activeStream, eng.audioMimeType, eng.currentAudioPart);
+                showToast('녹음이 예기치 않게 중단되어 새 파트로 자동 재개합니다.');
+              } catch {
+                eng.recordingActive = false;
+                setRecordingEnabledState(false);
+                showToast('녹음 재시작에 실패해 발언 기록만 계속합니다.');
+              }
+            }
+            syncUiFromEngine();
+            persistSnapshotToIdb(true);
+          })();
+        }
+      };
+
+      recorder.onerror = () => {
+        resolveStop();
+      };
+
+      recorderRef.current = recorder;
+      recorder.start(1000);
+    },
+    [closeCurrentTurnAndSwitch, persistSnapshotToIdb, showToast, syncEngineClock, syncUiFromEngine]
+  );
+
+  const stopCurrentRecorder = useCallback(async () => {
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+    if (recorder.state !== 'inactive') {
+      intentionalStopRef.current = true;
+      const stopPromise = recorderStopPromiseRef.current;
+      try {
+        recorder.stop();
+      } catch {
+        intentionalStopRef.current = false;
+      }
+      if (stopPromise) {
+        await Promise.race([
+          stopPromise,
+          new Promise<void>((resolve) => window.setTimeout(resolve, 1500)),
+        ]);
+      }
+    }
+    recorderRef.current = null;
+  }, []);
 
   // High-frequency tick while running + periodic IDB backup every 5s
   useEffect(() => {
@@ -423,7 +488,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [sessionStatus, syncEngineClock, syncUiFromEngine, persistSnapshotToIdb]);
 
-  // Safari / background visibility defense & MP4 part splitting
+  // iOS Safari (audio/mp4) background defense; PC & Android (webm) keep running in background tabs
   useEffect(() => {
     const handleVisibilityChange = async () => {
       const eng = engineRef.current;
@@ -431,28 +496,30 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       if (document.visibilityState === 'hidden') {
         if (eng.isBackgroundPaused) return;
+        // Only pause on iOS MP4 recording to prevent corrupting MP4 container in background
+        if (!eng.recordingActive || !isMp4Mime(eng.audioMimeType)) {
+          return;
+        }
         syncEngineClock();
         eng.isBackgroundPaused = true;
         eng.activePauseStartIso = new Date().toISOString();
         eng.activePauseReason = 'background';
         eng.activePauseOffsetSec = eng.elapsedAudioSec;
 
-        if (eng.recordingActive && recorderRef.current) {
-          if (isMp4Mime(eng.audioMimeType)) {
-            // Split turn cleanly at part boundary so part1.m4a and timeline match 1:1
-            closeCurrentTurnAndSwitch(eng.activeSpeakerId, eng.activeSpeakerName);
-            await stopCurrentRecorder();
-          } else if (recorderRef.current.state === 'recording') {
-            try {
-              recorderRef.current.pause();
-            } catch {
-              // Ignore pause failure
-            }
-          }
+        if (recorderRef.current) {
+          closeCurrentTurnAndSwitch(eng.activeSpeakerId, eng.activeSpeakerName, true);
+          await stopCurrentRecorder();
         }
         persistSnapshotToIdb(true);
       } else if (document.visibilityState === 'visible') {
-        if (!eng.isBackgroundPaused) return;
+        void wakeKeepAliveRef.current.resume();
+
+        if (!eng.isBackgroundPaused) {
+          syncEngineClock();
+          syncUiFromEngine();
+          return;
+        }
+
         if (eng.activePauseStartIso) {
           eng.pausedRanges.push({
             startedAt: eng.activePauseStartIso,
@@ -466,7 +533,6 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         eng.isBackgroundPaused = false;
         eng.lastTickPerfMs = performance.now();
-        void wakeKeepAliveRef.current.resume();
 
         if (eng.recordingActive) {
           const rec = recorderRef.current;
@@ -477,9 +543,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
               // Fallback to new part if resume fails
             }
           } else if (!rec || rec.state === 'inactive') {
-            // Ensure previous turn is closed before incrementing part if it wasn't already closed on hide
             if (eng.elapsedAudioSec > eng.activeTurnStartAudioSec) {
-              closeCurrentTurnAndSwitch(eng.activeSpeakerId, eng.activeSpeakerName);
+              closeCurrentTurnAndSwitch(eng.activeSpeakerId, eng.activeSpeakerName, true);
             }
             eng.currentAudioPart += 1;
             eng.partElapsedSec = 0;
@@ -727,6 +792,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const nowIso = new Date().toISOString();
     const sessionId = `sess_${Date.now()}`;
     chunkSeqRef.current = 0;
+    intentionalStopRef.current = false;
+
+    // Keep latest 3 completed sessions in IndexedDB to prevent unbounded storage growth
+    void pruneOldCompletedSessions(3);
 
     engineRef.current = {
       sessionId,
@@ -743,6 +812,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       currentAudioPart: 1,
       activeTurnStartAudioSec: 0,
       activeTurnStartPartSec: 0,
+      activeTurnIsContinuation: false,
       lastTickPerfMs: performance.now(),
       timeline: [],
       pausedRanges: [],
@@ -811,17 +881,57 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     eng.lastTickPerfMs = performance.now();
     void wakeKeepAliveRef.current.resume();
 
-    if (eng.recordingActive && recorderRef.current && recorderRef.current.state === 'paused') {
-      try {
-        recorderRef.current.resume();
-      } catch {
-        // Ignore resume errors
+    if (eng.recordingActive) {
+      const rec = recorderRef.current;
+      if (rec && rec.state === 'paused') {
+        try {
+          rec.resume();
+        } catch {
+          // Fall through to part recovery below if resume fails
+        }
+      } else if (!rec || rec.state === 'inactive') {
+        void (async () => {
+          if (eng.elapsedAudioSec > eng.activeTurnStartAudioSec) {
+            closeCurrentTurnAndSwitch(eng.activeSpeakerId, eng.activeSpeakerName, true);
+          }
+          eng.currentAudioPart += 1;
+          eng.partElapsedSec = 0;
+          eng.activeTurnStartPartSec = 0;
+
+          let stream = streamRef.current;
+          const hasLiveTrack = stream?.getAudioTracks().some((t) => t.readyState === 'live');
+          if (!hasLiveTrack && navigator.mediaDevices?.getUserMedia) {
+            try {
+              stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              streamRef.current = stream;
+            } catch {
+              eng.recordingActive = false;
+              setRecordingEnabledState(false);
+              showToast('일시정지 중 마이크가 끊겨 녹음 없이 이어서 기록합니다.');
+              syncUiFromEngine();
+              persistSnapshotToIdb(true, 'running');
+              return;
+            }
+          }
+          if (stream && eng.recordingActive) {
+            startRecorderForPart(stream, eng.audioMimeType, eng.currentAudioPart);
+            showToast('일시정지 중 녹음이 중단되어 새 파트로 이어서 녹음합니다.');
+          }
+          syncUiFromEngine();
+          persistSnapshotToIdb(true, 'running');
+        })();
       }
     }
 
     syncUiFromEngine();
     persistSnapshotToIdb(true, 'running');
-  }, [persistSnapshotToIdb, syncUiFromEngine]);
+  }, [
+    closeCurrentTurnAndSwitch,
+    persistSnapshotToIdb,
+    showToast,
+    startRecorderForPart,
+    syncUiFromEngine,
+  ]);
 
   const selectSpeaker = useCallback(
     (participantId: string) => {
@@ -890,6 +1000,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     eng.activeSpeakerName = prev.speaker;
     eng.activeTurnStartAudioSec = prev.startSec;
     eng.activeTurnStartPartSec = prev.partStartSec;
+    eng.activeTurnIsContinuation = prev.isContinuation ?? false;
 
     syncUiFromEngine();
     persistSnapshotToIdb(true);
@@ -946,6 +1057,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       audioParts,
       isRecovered: false,
     });
+    setLastCompletedSession(finalRecord);
     setRecoverableSession(null);
 
     engineRef.current = createEmptyEngine();
@@ -985,6 +1097,22 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setRecoverableSession(null);
   }, [recoverableSession]);
 
+  const reopenLastSession = useCallback(async () => {
+    if (!lastCompletedSession) return;
+    const audioParts = lastCompletedSession.recordingEnabled
+      ? await getSessionAudioParts(lastCompletedSession.id, lastCompletedSession.audioMimeType)
+      : [];
+    const normalizedParts = audioParts.map((part) => ({
+      ...part,
+      ext: getExtForMime(part.mimeType),
+    }));
+    setResultModal({
+      record: lastCompletedSession,
+      audioParts: normalizedParts,
+      isRecovered: false,
+    });
+  }, [lastCompletedSession]);
+
   const discardUnfinishedBackup = useCallback(async () => {
     if (!recoverableSession) return;
     await deleteSessionData(recoverableSession.id);
@@ -1003,7 +1131,9 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         facTotal += entry.durationSec;
       } else {
         totals.set(entry.speakerId, (totals.get(entry.speakerId) ?? 0) + entry.durationSec);
-        turns.set(entry.speakerId, (turns.get(entry.speakerId) ?? 0) + 1);
+        if (!entry.isContinuation) {
+          turns.set(entry.speakerId, (turns.get(entry.speakerId) ?? 0) + 1);
+        }
       }
     }
 
@@ -1012,7 +1142,9 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         facTotal += currentTurnElapsedSec;
       } else {
         totals.set(activeSpeakerId, (totals.get(activeSpeakerId) ?? 0) + currentTurnElapsedSec);
-        turns.set(activeSpeakerId, (turns.get(activeSpeakerId) ?? 0) + 1);
+        if (!activeTurnIsContinuation) {
+          turns.set(activeSpeakerId, (turns.get(activeSpeakerId) ?? 0) + 1);
+        }
       }
     }
 
@@ -1056,7 +1188,14 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       facilitatorTotalSec: facTotal,
       participantsTotalSec: pSum,
     };
-  }, [activeSpeakerId, currentTurnElapsedSec, participants, sessionStatus, timelineSnapshot]);
+  }, [
+    activeSpeakerId,
+    activeTurnIsContinuation,
+    currentTurnElapsedSec,
+    participants,
+    sessionStatus,
+    timelineSnapshot,
+  ]);
 
   const canUndo =
     (sessionStatus === 'running' || sessionStatus === 'paused') &&
@@ -1083,6 +1222,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     timeline: timelineSnapshot,
     participantMetrics,
     recoverableSession,
+    lastCompletedSession,
     resultModal,
     toastMessage,
     setMode,
@@ -1108,6 +1248,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     endSession,
     closeResultModal,
     recoverUnfinishedSession,
+    reopenLastSession,
     discardUnfinishedBackup,
     showToast,
   };

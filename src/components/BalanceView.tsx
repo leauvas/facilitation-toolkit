@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Circle,
   Download,
+  History,
   Mic,
   Minus,
   Plus,
@@ -54,6 +55,7 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
     timeline,
     participantMetrics,
     recoverableSession,
+    lastCompletedSession,
     addParticipant,
     setParticipantCount,
     removeParticipant,
@@ -65,6 +67,7 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
     selectSpeaker,
     switchToFacilitator,
     recoverUnfinishedSession,
+    reopenLastSession,
     discardUnfinishedBackup,
   } = useSession();
 
@@ -405,6 +408,19 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
               <Mic className="h-2.5 w-2.5 shrink-0" />
               <span>진행자 자리</span>
             </button>
+
+            {/* Reopen Latest Completed Result Report when idle */}
+            {sessionStatus === 'idle' && lastCompletedSession && (
+              <button
+                type="button"
+                onClick={() => void reopenLastSession()}
+                className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-lime-600 bg-lime-100/80 px-2 py-0.5 text-[10px] font-semibold text-lime-800 transition hover:bg-lime-200/70"
+                title="가장 최근 완료된 세션 결과 리포트 다시 열기"
+              >
+                <History className="h-2.5 w-2.5 shrink-0" />
+                <span>최근 결과</span>
+              </button>
+            )}
           </div>
 
           {/* Legend */}

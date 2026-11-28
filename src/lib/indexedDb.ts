@@ -76,6 +76,49 @@ export async function getUnfinishedSession(): Promise<SessionRecord | null> {
   }
 }
 
+export async function getLatestCompletedSession(): Promise<SessionRecord | null> {
+  try {
+    const db = await openDb();
+    const sessions = await new Promise<SessionRecord[]>((resolve, reject) => {
+      const tx = db.transaction(SESSIONS_STORE, 'readonly');
+      const req = tx.objectStore(SESSIONS_STORE).getAll();
+      req.onsuccess = () => resolve((req.result as SessionRecord[]) ?? []);
+      req.onerror = () => reject(req.error);
+    });
+
+    const completed = sessions
+      .filter((s) => s.status === 'completed')
+      .sort((a, b) => b.sessionStartedAt.localeCompare(a.sessionStartedAt));
+
+    return completed[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function pruneOldCompletedSessions(keepCount = 3): Promise<void> {
+  try {
+    const db = await openDb();
+    const sessions = await new Promise<SessionRecord[]>((resolve, reject) => {
+      const tx = db.transaction(SESSIONS_STORE, 'readonly');
+      const req = tx.objectStore(SESSIONS_STORE).getAll();
+      req.onsuccess = () => resolve((req.result as SessionRecord[]) ?? []);
+      req.onerror = () => reject(req.error);
+    });
+
+    const completed = sessions
+      .filter((s) => s.status === 'completed')
+      .sort((a, b) => b.sessionStartedAt.localeCompare(a.sessionStartedAt));
+
+    const toDelete = completed.slice(keepCount);
+    for (const oldSession of toDelete) {
+      await deleteSessionData(oldSession.id);
+    }
+  } catch {
+    // Ignore cleanup errors
+  }
+}
+
 export async function getSessionAudioParts(
   sessionId: string,
   fallbackMimeType: string
