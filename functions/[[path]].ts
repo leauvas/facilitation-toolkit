@@ -1,5 +1,12 @@
+interface AssetsBinding {
+  fetch: (input: Request | URL | string) => Promise<Response>;
+}
+
 interface PagesFunctionContext {
   request: Request;
+  env?: {
+    ASSETS?: AssetsBinding;
+  };
   next: () => Promise<Response>;
 }
 
@@ -12,7 +19,7 @@ const ALLOWED_STATIC_FILES = new Set([
   '/toolkit/index.html',
 ]);
 
-function notFoundResponse(): Response {
+function notFoundResponse(reason: string): Response {
   const html = `<!doctype html>
 <html lang="ko">
   <head>
@@ -54,19 +61,31 @@ function notFoundResponse(): Response {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
+      'X-404-Reason': reason,
     },
   });
 }
 
 export const onRequest = async (context: PagesFunctionContext): Promise<Response> => {
-  const proxyHost = context.request.headers.get('X-Proxy-Host');
+  const rawProxyHost = context.request.headers.get('X-Proxy-Host');
+  const proxyHost = rawProxyHost?.trim().toLowerCase();
+
   if (proxyHost !== 'facilitation.group') {
-    return notFoundResponse();
+    return notFoundResponse('invalid-proxy-host');
   }
 
   const { pathname } = new URL(context.request.url);
 
   if (pathname === '/toolkit/allvoices' || pathname === '/toolkit/allvoices/') {
+    if (context.env?.ASSETS) {
+      const entryUrl = new URL('/toolkit/', context.request.url);
+      const assetRes = await context.env.ASSETS.fetch(
+        new Request(entryUrl.toString(), { method: 'GET' })
+      );
+      if (assetRes.ok) {
+        return assetRes;
+      }
+    }
     return context.next();
   }
 
@@ -74,5 +93,5 @@ export const onRequest = async (context: PagesFunctionContext): Promise<Response
     return context.next();
   }
 
-  return notFoundResponse();
+  return notFoundResponse('unregistered-path');
 };
