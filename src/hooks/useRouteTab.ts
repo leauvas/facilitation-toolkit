@@ -1,33 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
 import { TabRoute } from '../types/facilitation';
 
-const CANONICAL_PATH = '/toolkit/allvoices';
-
-function ensureCanonicalPath(): void {
-  const clean = window.location.pathname.replace(/\/+$/, '') || '/';
-  if (clean !== CANONICAL_PATH) {
-    window.history.replaceState(null, '', CANONICAL_PATH);
-  }
+function isAllowedPath(pathname: string): boolean {
+  return pathname === '/toolkit/allvoices' || pathname === '/toolkit/allvoices/';
 }
 
 export function useRouteTab() {
-  const [activeTab, setActiveTab] = useState<TabRoute>(() => {
-    ensureCanonicalPath();
-    return 'balance';
-  });
+  const [activeTab, setActiveTab] = useState<TabRoute>('balance');
+  const [isNotFound, setIsNotFound] = useState<boolean>(() => !isAllowedPath(window.location.pathname));
 
   useEffect(() => {
     const onPopState = () => {
-      ensureCanonicalPath();
+      setIsNotFound(!isAllowedPath(window.location.pathname));
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
   const navigate = useCallback((tab: TabRoute) => {
-    ensureCanonicalPath();
     setActiveTab(tab);
   }, []);
 
-  return { activeTab, navigate };
+  return { activeTab, navigate, isNotFound };
 }

@@ -11,8 +11,8 @@ function cloudflareSubpathRedirects(): Plugin {
       const distRoot = path.resolve('dist');
       if (!fs.existsSync(distRoot)) return;
       const redirectsContent = [
-        '/toolkit/* /toolkit/index.html 200',
-        '/* /toolkit/index.html 200',
+        '/toolkit/allvoices /toolkit/index.html 200',
+        '/toolkit/allvoices/ /toolkit/index.html 200',
         '',
       ].join('\n');
       fs.writeFileSync(path.join(distRoot, '_redirects'), redirectsContent, 'utf8');
