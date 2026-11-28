@@ -80,10 +80,17 @@ export const onRequest = async (context: PagesFunctionContext): Promise<Response
     if (context.env?.ASSETS) {
       const entryUrl = new URL('/toolkit/', context.request.url);
       const assetRes = await context.env.ASSETS.fetch(
-        new Request(entryUrl.toString(), { method: 'GET' })
+        new Request(entryUrl.toString(), { method: 'GET', redirect: 'follow' })
       );
       if (assetRes.ok) {
-        return assetRes;
+        const html = await assetRes.text();
+        return new Response(html, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-cache',
+          },
+        });
       }
     }
     return context.next();
