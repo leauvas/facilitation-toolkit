@@ -4,7 +4,6 @@ import {
   Clock,
   Mic,
   MicOff,
-  Move,
   Pause,
   Play,
   Square,
@@ -228,19 +227,19 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                 </button>
               )}
 
-              {/* Layout / Discuss Mode Toggle */}
+              {/* Layout Mode Light-Switch Toggle */}
               <button
                 type="button"
+                aria-pressed={mode === 'layout'}
                 onClick={() => setMode(mode === 'layout' ? 'discuss' : 'layout')}
-                className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold transition ${
+                className={`flex shrink-0 items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                   mode === 'layout'
-                    ? 'border-lime-600 bg-lime-100/80 text-lime-800'
-                    : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'
+                    ? 'border-lime-700 bg-lime-700 text-white shadow-xs'
+                    : 'border-stone-200 bg-stone-100 text-stone-700 hover:bg-stone-200'
                 }`}
-                title="좌석 배치 / 토론 진행 모드 전환"
+                title="좌석 배치 편집 모드 ON/OFF"
               >
-                <Move className="h-3 w-3 shrink-0" />
-                <span>{mode === 'layout' ? '좌석 배치' : '토론 진행'}</span>
+                <span>좌석 배치</span>
               </button>
 
               {/* Session Action Buttons */}

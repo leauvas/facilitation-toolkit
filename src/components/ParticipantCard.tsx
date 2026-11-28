@@ -60,6 +60,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
     onMove: (x, y) => onMove(participant.id, x, y),
     onSwapTargetChange,
     onSwapSeats,
+    onLongPress: () => setIsEditingName(true),
   });
 
   useEffect(() => {
@@ -132,6 +133,11 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         transform: 'translate(-50%, -50%)',
       }}
       onPointerDown={handlePointerDown}
+      onContextMenu={(e) => {
+        if (mode === 'layout') {
+          e.preventDefault();
+        }
+      }}
       onClick={() => {
         if (mode === 'discuss' && !isEditingName) {
           onSelect(participant.id);
@@ -145,7 +151,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           onSelect(participant.id);
         }
       }}
-      className={`absolute select-none transition-all duration-150 ${sizeClasses} ${cardStyle} ${swapHighlightClass} ${
+      className={`touch-callout-none absolute select-none transition-all duration-150 ${sizeClasses} ${cardStyle} ${swapHighlightClass} ${
         mode === 'layout'
           ? `touch-none cursor-grab ${isDragging ? 'z-30 scale-105 cursor-grabbing shadow-lg' : 'z-10 hover:shadow-md'}`
           : 'z-10 cursor-pointer active:scale-95'

@@ -34,6 +34,7 @@ interface UseSeatDragOptions {
     posA: { x: number; y: number },
     posB: { x: number; y: number }
   ) => void;
+  onLongPress?: () => void;
 }
 
 export function useSeatDrag({
@@ -45,6 +46,7 @@ export function useSeatDrag({
   onMove,
   onSwapTargetChange,
   onSwapSeats,
+  onLongPress,
 }: UseSeatDragOptions) {
   const [isDragging, setIsDragging] = useState(false);
   const swapTargetRef = useRef<string | null>(null);
@@ -102,9 +104,21 @@ export function useSeatDrag({
     swapTargetRef.current = null;
     onSwapTargetChange(null);
 
+    let longPressTimer: number | null = null;
+    const clearLongPress = () => {
+      if (longPressTimer !== null) {
+        window.clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    };
+
     const onPointerMove = (moveEv: PointerEvent) => {
       const dx = moveEv.clientX - startClientX;
       const dy = moveEv.clientY - startClientY;
+
+      if (Math.hypot(dx, dy) >= 8) {
+        clearLongPress();
+      }
 
       const pctX = ((moveEv.clientX - canvasRect.left) / canvasRect.width) * 100;
       const pctY = ((moveEv.clientY - canvasRect.top) / canvasRect.height) * 100;
@@ -152,11 +166,26 @@ export function useSeatDrag({
     };
 
     const cleanup = () => {
+      clearLongPress();
       setIsDragging(false);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerCancel);
     };
+
+    if (onLongPress) {
+      longPressTimer = window.setTimeout(() => {
+        longPressTimer = null;
+        swapTargetRef.current = null;
+        onSwapTargetChange(null);
+        cleanup();
+        onMove(startPosA.x, startPosA.y);
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+          navigator.vibrate(30);
+        }
+        onLongPress();
+      }, 900);
+    }
 
     const onPointerUp = () => {
       const targetId = swapTargetRef.current;

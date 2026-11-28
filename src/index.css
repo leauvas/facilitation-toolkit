@@ -21,6 +21,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.touch-callout-none {
+  -webkit-touch-callout: none;
+}
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }

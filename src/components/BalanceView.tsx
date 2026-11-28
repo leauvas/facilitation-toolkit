@@ -16,6 +16,9 @@ import { useSession } from '../context/SessionContext';
 import { MAX_PARTICIPANTS, MIN_PARTICIPANTS } from '../lib/layoutUtils';
 import { formatClockMMSS } from '../lib/exportUtils';
 import { useCurrentTimeHHMM } from '../hooks/useCurrentTime';
+import { useLongPress } from '../hooks/useLongPress';
+import { BalanceMode, Participant } from '../types/facilitation';
+import { LiveParticipantMetrics } from '../context/SessionContext';
 import { HourglassSvg } from './HourglassSvg';
 import { ParticipantCard } from './ParticipantCard';
 import { FacilitatorCard } from './FacilitatorCard';
@@ -32,6 +35,105 @@ const TURN_PRESETS = [
   { label: '3분', sec: 180 },
   { label: '5분', sec: 300 },
 ];
+
+interface ShareChipProps {
+  participant: Participant;
+  metrics: LiveParticipantMetrics;
+  mode: BalanceMode;
+  onRename: (id: string, name: string) => void;
+}
+
+const ShareChip: React.FC<ShareChipProps> = ({ participant, metrics, mode, onRename }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftName, setDraftName] = useState(participant.name);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setDraftName(participant.name);
+  }, [participant.name]);
+
+  useEffect(() => {
+    if (isEditing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [isEditing]);
+
+  const longPressHandlers = useLongPress({
+    enabled: mode === 'layout' && !isEditing,
+    delayMs: 900,
+    moveThresholdPx: 8,
+    onLongPress: () => setIsEditing(true),
+  });
+
+  const commitName = () => {
+    onRename(participant.id, draftName);
+    setIsEditing(false);
+  };
+
+  const dotColor =
+    metrics.balanceState === 'speaking'
+      ? 'bg-lime-600'
+      : metrics.balanceState === 'dominant'
+        ? 'bg-orange-500'
+        : metrics.balanceState === 'balanced'
+          ? 'bg-emerald-500'
+          : 'bg-stone-300';
+
+  const barColor = dotColor;
+
+  return (
+    <div
+      {...longPressHandlers}
+      className={`touch-callout-none min-w-0 select-none rounded-lg border px-2 py-1 transition [@media(max-height:450px)]:px-1.5 [@media(max-height:450px)]:py-0.5 ${
+        isEditing
+          ? 'z-10 border-lime-600 bg-white ring-2 ring-lime-600'
+          : 'border-stone-200 bg-stone-50/80'
+      }`}
+    >
+      {isEditing ? (
+        <input
+          ref={inputRef}
+          type="text"
+          value={draftName}
+          maxLength={14}
+          onChange={(e) => setDraftName(e.target.value)}
+          onBlur={commitName}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitName();
+            if (e.key === 'Escape') {
+              setDraftName(participant.name);
+              setIsEditing(false);
+            }
+          }}
+          className="w-full rounded bg-transparent text-xs font-semibold text-stone-900 focus:outline-none sm:text-[11px]"
+        />
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-1 leading-tight">
+            <div className="flex min-w-0 items-center gap-1">
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotColor}`} />
+              <span className="min-w-0 truncate whitespace-nowrap text-xs font-semibold text-stone-900 sm:text-[11px] [@media(max-height:450px)]:text-[10px]">
+                {participant.name}
+              </span>
+            </div>
+            <span className="shrink-0 tabular-nums text-[11px] font-semibold text-stone-600 sm:text-[10px]">
+              {Math.round(metrics.sharePct)}%
+            </span>
+          </div>
+          <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-stone-200">
+            <div
+              className={`h-full rounded-full transition-all duration-200 ${barColor}`}
+              style={{
+                width: `${Math.min(100, Math.max(metrics.totalSec > 0 ? 4 : 0, metrics.sharePct))}%`,
+              }}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 export const BalanceView: React.FC<BalanceViewProps> = ({
   confirmEndOpen,
@@ -571,60 +673,23 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
                 : 'grid-cols-2 gap-1.5 sm:grid-cols-1 sm:gap-y-1.5 landscape:grid-cols-1 landscape:gap-y-1 [@media(max-height:450px)]:gap-y-1'
             }`}
           >
-            {participants.map((p) => {
-              const m = participantMetrics[p.id] ?? {
-                totalSec: 0,
-                turnCount: 0,
-                sharePct: 0,
-                balanceState: 'unspoken',
-                currentTurnElapsedSec: 0,
-              };
-
-              const dotColor =
-                m.balanceState === 'speaking'
-                  ? 'bg-lime-600'
-                  : m.balanceState === 'dominant'
-                    ? 'bg-orange-500'
-                    : m.balanceState === 'balanced'
-                      ? 'bg-emerald-500'
-                      : 'bg-stone-300';
-
-              const barColor =
-                m.balanceState === 'speaking'
-                  ? 'bg-lime-600'
-                  : m.balanceState === 'dominant'
-                    ? 'bg-orange-500'
-                    : m.balanceState === 'balanced'
-                      ? 'bg-emerald-500'
-                      : 'bg-stone-300';
-
-              return (
-                <div
-                  key={p.id}
-                  className="min-w-0 rounded-lg border border-stone-200 bg-stone-50/80 px-2 py-1 [@media(max-height:450px)]:px-1.5 [@media(max-height:450px)]:py-0.5"
-                >
-                  <div className="flex items-center justify-between gap-1 leading-tight">
-                    <div className="flex min-w-0 items-center gap-1">
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotColor}`} />
-                      <span className="min-w-0 truncate whitespace-nowrap text-xs font-semibold text-stone-900 sm:text-[11px] [@media(max-height:450px)]:text-[10px]">
-                        {p.name}
-                      </span>
-                    </div>
-                    <span className="shrink-0 tabular-nums text-[11px] font-semibold text-stone-600 sm:text-[10px]">
-                      {Math.round(m.sharePct)}%
-                    </span>
-                  </div>
-                  <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-stone-200">
-                    <div
-                      className={`h-full rounded-full transition-all duration-200 ${barColor}`}
-                      style={{
-                        width: `${Math.min(100, Math.max(m.totalSec > 0 ? 4 : 0, m.sharePct))}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
+            {participants.map((p) => (
+              <ShareChip
+                key={p.id}
+                participant={p}
+                metrics={
+                  participantMetrics[p.id] ?? {
+                    totalSec: 0,
+                    turnCount: 0,
+                    sharePct: 0,
+                    balanceState: 'unspoken',
+                    currentTurnElapsedSec: 0,
+                  }
+                }
+                mode={mode}
+                onRename={renameParticipant}
+              />
+            ))}
           </div>
         </div>
 
