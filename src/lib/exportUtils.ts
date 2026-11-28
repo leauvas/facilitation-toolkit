@@ -1,4 +1,10 @@
-import { Participant, ParticipantStat, SessionRecord, TimelineEntry } from '../types/facilitation';
+import {
+  Participant,
+  ParticipantStat,
+  SessionMarker,
+  SessionRecord,
+  TimelineEntry,
+} from '../types/facilitation';
 
 export function round2(num: number): number {
   return Math.round(num * 100) / 100;
@@ -25,25 +31,50 @@ export function formatClockMMSS(totalSeconds: number): string {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-export function buildTimelineText(timeline: TimelineEntry[]): string {
+export function buildTimelineText(
+  timeline: TimelineEntry[],
+  sessionMarkers: SessionMarker[] = []
+): string {
   const speakerTurnCounts = new Map<string, number>();
+  const lines: string[] = [];
+  const emittedMarkers = new Set<number>();
 
-  return timeline
-    .map((entry) => {
-      const startLabel = formatClockMMSS(entry.startSec);
-      const endLabel = formatClockMMSS(entry.endSec);
-      if (entry.speakerId === 'facilitator' || entry.speaker === '진행자') {
-        return `[${startLabel} - ${endLabel}] 진행자`;
+  const emitMarkersUpTo = (sessionNum: number) => {
+    for (const marker of sessionMarkers) {
+      if (!emittedMarkers.has(marker.sessionNumber) && marker.sessionNumber <= sessionNum) {
+        emittedMarkers.add(marker.sessionNumber);
+        lines.push(`[${formatClockMMSS(marker.audioOffsetSec)}] === ${marker.label} ===`);
       }
-      if (entry.isContinuation) {
-        const currentTurn = Math.max(1, speakerTurnCounts.get(entry.speakerId) ?? 1);
-        return `[${startLabel} - ${endLabel}] ${entry.speaker} (발언 #${currentTurn} 이어서)`;
-      }
+    }
+  };
+
+  for (const entry of timeline) {
+    if (sessionMarkers.length > 0) {
+      emitMarkersUpTo(entry.sessionNumber ?? 1);
+    }
+
+    const startLabel = formatClockMMSS(entry.startSec);
+    const endLabel = formatClockMMSS(entry.endSec);
+    if (entry.speakerId === 'facilitator' || entry.speaker === '진행자') {
+      lines.push(`[${startLabel} - ${endLabel}] 진행자`);
+    } else if (entry.isContinuation) {
+      const currentTurn = Math.max(1, speakerTurnCounts.get(entry.speakerId) ?? 1);
+      lines.push(`[${startLabel} - ${endLabel}] ${entry.speaker} (발언 #${currentTurn} 이어서)`);
+    } else {
       const nextTurn = (speakerTurnCounts.get(entry.speakerId) ?? 0) + 1;
       speakerTurnCounts.set(entry.speakerId, nextTurn);
-      return `[${startLabel} - ${endLabel}] ${entry.speaker} (발언 #${nextTurn})`;
-    })
-    .join('\n');
+      lines.push(`[${startLabel} - ${endLabel}] ${entry.speaker} (발언 #${nextTurn})`);
+    }
+  }
+
+  for (const marker of sessionMarkers) {
+    if (!emittedMarkers.has(marker.sessionNumber)) {
+      emittedMarkers.add(marker.sessionNumber);
+      lines.push(`[${formatClockMMSS(marker.audioOffsetSec)}] === ${marker.label} ===`);
+    }
+  }
+
+  return lines.join('\n');
 }
 
 export function buildAiSummaryPrompt(sessionStartedAt: string, participants: Participant[]): string {
@@ -70,6 +101,10 @@ export function buildTimelineJson(record: SessionRecord): string {
     sessionStartedAt: record.sessionStartedAt,
     totalDurationSec: round2(record.totalDurationSec),
     audioMimeType: record.audioMimeType || 'none',
+    sessionMarkers: (record.sessionMarkers ?? []).map((m) => ({
+      ...m,
+      audioOffsetSec: round2(m.audioOffsetSec),
+    })),
     pausedRanges: record.pausedRanges.map((r) => ({
       ...r,
       audioOffsetSec: round2(r.audioOffsetSec),
@@ -83,6 +118,7 @@ export function buildTimelineJson(record: SessionRecord): string {
       audioPart: t.audioPart,
       partStartSec: round2(t.partStartSec),
       partEndSec: round2(t.partEndSec),
+      ...(t.sessionNumber ? { sessionNumber: t.sessionNumber } : {}),
     })),
   };
 

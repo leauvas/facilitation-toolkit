@@ -10,9 +10,11 @@ import React, {
 import {
   AudioPartBlob,
   BalanceMode,
+  CompletedSessionSnapshot,
   FacilitatorSeat,
   Participant,
   PausedRange,
+  SessionMarker,
   SessionRecord,
   SessionStatus,
   SpeakerBalanceState,
@@ -43,7 +45,9 @@ import {
   pruneOldCompletedSessions,
   saveSessionMeta,
 } from '../lib/indexedDb';
-import { round2 } from '../lib/exportUtils';
+import { computeParticipantStats, round2 } from '../lib/exportUtils';
+
+const WORKSHOP_STORAGE_KEY = 'allvoices_workshop_state_v1';
 
 export interface LiveParticipantMetrics {
   totalSec: number;
@@ -75,6 +79,11 @@ interface SessionEngineState {
   activeTurnStartAudioSec: number;
   activeTurnStartPartSec: number;
   activeTurnIsContinuation: boolean;
+  currentSessionNumber: number;
+  currentSessionStartAudioSec: number;
+  currentSessionStartedAt: string;
+  completedSessions: CompletedSessionSnapshot[];
+  sessionMarkers: SessionMarker[];
   lastTickPerfMs: number;
   timeline: TimelineEntry[];
   pausedRanges: PausedRange[];
@@ -96,12 +105,18 @@ interface SessionContextValue {
   activeSpeakerId: string;
   activeSpeakerName: string;
   elapsedAudioSec: number;
+  currentSessionNumber: number;
+  currentSessionElapsedSec: number;
   currentTurnElapsedSec: number;
   facilitatorTotalSec: number;
+  overallFacilitatorTotalSec: number;
   participantsTotalSec: number;
   canUndo: boolean;
   timeline: TimelineEntry[];
+  completedSessions: CompletedSessionSnapshot[];
+  sessionMarkers: SessionMarker[];
   participantMetrics: Record<string, LiveParticipantMetrics>;
+  overallParticipantMetrics: Record<string, LiveParticipantMetrics>;
   recoverableSession: SessionRecord | null;
   lastCompletedSession: SessionRecord | null;
   resultModal: ResultModalPayload | null;
@@ -126,6 +141,7 @@ interface SessionContextValue {
   ) => void;
   resetLayout: () => void;
   startSession: () => Promise<void>;
+  startNextSession: () => void;
   pauseSession: () => void;
   resumeSession: () => void;
   selectSpeaker: (participantId: string) => void;
@@ -158,6 +174,11 @@ function createEmptyEngine(): SessionEngineState {
     activeTurnStartAudioSec: 0,
     activeTurnStartPartSec: 0,
     activeTurnIsContinuation: false,
+    currentSessionNumber: 1,
+    currentSessionStartAudioSec: 0,
+    currentSessionStartedAt: '',
+    completedSessions: [],
+    sessionMarkers: [],
     lastTickPerfMs: 0,
     timeline: [],
     pausedRanges: [],
@@ -191,6 +212,45 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [elapsedAudioSec, setElapsedAudioSec] = useState<number>(0);
   const [currentTurnElapsedSec, setCurrentTurnElapsedSec] = useState<number>(0);
   const [activeTurnIsContinuation, setActiveTurnIsContinuation] = useState<boolean>(false);
+  const [currentSessionNumber, setCurrentSessionNumber] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(WORKSHOP_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { currentSessionNumber?: number };
+        if (typeof parsed.currentSessionNumber === 'number' && parsed.currentSessionNumber >= 1) {
+          return parsed.currentSessionNumber;
+        }
+      }
+    } catch {
+      // Ignore
+    }
+    return 1;
+  });
+  const [currentSessionStartAudioSec, setCurrentSessionStartAudioSec] = useState<number>(0);
+  const [completedSessions, setCompletedSessions] = useState<CompletedSessionSnapshot[]>(() => {
+    try {
+      const raw = localStorage.getItem(WORKSHOP_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { completedSessions?: CompletedSessionSnapshot[] };
+        if (Array.isArray(parsed.completedSessions)) return parsed.completedSessions;
+      }
+    } catch {
+      // Ignore
+    }
+    return [];
+  });
+  const [sessionMarkers, setSessionMarkers] = useState<SessionMarker[]>(() => {
+    try {
+      const raw = localStorage.getItem(WORKSHOP_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { sessionMarkers?: SessionMarker[] };
+        if (Array.isArray(parsed.sessionMarkers)) return parsed.sessionMarkers;
+      }
+    } catch {
+      // Ignore
+    }
+    return [];
+  });
   const [timelineSnapshot, setTimelineSnapshot] = useState<TimelineEntry[]>([]);
 
   const [recoverableSession, setRecoverableSession] = useState<SessionRecord | null>(null);
@@ -233,6 +293,22 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [participants, facilitatorSeat, showFacilitatorSeat, tableShape, recommendedTurnSec, goalMinutes]);
 
+  // Persist workshop session snapshots & markers to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        WORKSHOP_STORAGE_KEY,
+        JSON.stringify({
+          currentSessionNumber,
+          completedSessions,
+          sessionMarkers,
+        })
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [currentSessionNumber, completedSessions, sessionMarkers]);
+
   // Check IndexedDB on mount for any interrupted/uncompleted or latest completed session
   useEffect(() => {
     let mounted = true;
@@ -271,6 +347,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setElapsedAudioSec(eng.elapsedAudioSec);
     setCurrentTurnElapsedSec(Math.max(0, eng.elapsedAudioSec - eng.activeTurnStartAudioSec));
     setActiveTurnIsContinuation(eng.activeTurnIsContinuation);
+    setCurrentSessionNumber(eng.currentSessionNumber);
+    setCurrentSessionStartAudioSec(eng.currentSessionStartAudioSec);
+    setCompletedSessions([...eng.completedSessions]);
+    setSessionMarkers([...eng.sessionMarkers]);
     setTimelineSnapshot([...eng.timeline]);
   }, []);
 
@@ -294,6 +374,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
             audioPart: eng.currentAudioPart,
             partStartSec,
             partEndSec,
+            sessionNumber: eng.currentSessionNumber,
             ...(eng.activeTurnIsContinuation ? { isContinuation: true } : {}),
           });
         }
@@ -312,6 +393,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         timeline: entries,
         pausedRanges: [...eng.pausedRanges],
         audioPartsCount: eng.recordingActive ? eng.currentAudioPart : 0,
+        sessionMarkers: [...eng.sessionMarkers],
+        completedSessions: [...eng.completedSessions],
       };
     },
     []
@@ -348,6 +431,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         audioPart: eng.currentAudioPart,
         partStartSec,
         partEndSec,
+        sessionNumber: eng.currentSessionNumber,
         ...(eng.activeTurnIsContinuation ? { isContinuation: true } : {}),
       });
 
@@ -797,6 +881,13 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Keep latest 3 completed sessions in IndexedDB to prevent unbounded storage growth
     void pruneOldCompletedSessions(3);
 
+    const initialMarker: SessionMarker = {
+      sessionNumber: 1,
+      label: '1세션 시작',
+      audioOffsetSec: 0,
+      startedAt: nowIso,
+    };
+
     engineRef.current = {
       sessionId,
       sessionStartedAt: nowIso,
@@ -813,6 +904,11 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       activeTurnStartAudioSec: 0,
       activeTurnStartPartSec: 0,
       activeTurnIsContinuation: false,
+      currentSessionNumber: 1,
+      currentSessionStartAudioSec: 0,
+      currentSessionStartedAt: nowIso,
+      completedSessions: [],
+      sessionMarkers: [initialMarker],
       lastTickPerfMs: performance.now(),
       timeline: [],
       pausedRanges: [],
@@ -839,6 +935,86 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     syncUiFromEngine();
     persistSnapshotToIdb(false, 'running');
   }, [persistSnapshotToIdb, recordingEnabled, showToast, startRecorderForPart, syncUiFromEngine]);
+
+  const startNextSession = useCallback(() => {
+    const eng = engineRef.current;
+    const isLive = eng.status === 'running' || eng.status === 'paused';
+    const nowIso = new Date().toISOString();
+
+    if (isLive) {
+      syncEngineClock();
+      // Close active turn (if any elapsed or non-facilitator) and return to facilitator standby
+      if (eng.elapsedAudioSec > eng.activeTurnStartAudioSec || eng.activeSpeakerId !== 'facilitator') {
+        closeCurrentTurnAndSwitch('facilitator', '진행자');
+      }
+
+      const prevNum = eng.currentSessionNumber;
+      const sessionEntries = eng.timeline.filter((e) => (e.sessionNumber ?? 1) === prevNum);
+      const { stats, facilitatorTotalSec: facSec } = computeParticipantStats(
+        participantsRef.current,
+        sessionEntries
+      );
+      const snapshot: CompletedSessionSnapshot = {
+        sessionNumber: prevNum,
+        goalMinutes,
+        durationSec: round2(Math.max(0, eng.elapsedAudioSec - eng.currentSessionStartAudioSec)),
+        facilitatorTotalSec: round2(facSec),
+        participantStats: stats,
+        startedAt: eng.currentSessionStartedAt || eng.sessionStartedAt,
+        endedAt: nowIso,
+      };
+
+      const nextNum = prevNum + 1;
+      const marker: SessionMarker = {
+        sessionNumber: nextNum,
+        label: `${nextNum}세션 시작`,
+        audioOffsetSec: round2(eng.elapsedAudioSec),
+        startedAt: nowIso,
+      };
+
+      eng.completedSessions = [...eng.completedSessions, snapshot];
+      eng.sessionMarkers = [...eng.sessionMarkers, marker];
+      eng.currentSessionNumber = nextNum;
+      eng.currentSessionStartAudioSec = eng.elapsedAudioSec;
+      eng.currentSessionStartedAt = nowIso;
+
+      syncUiFromEngine();
+      persistSnapshotToIdb(true);
+      showToast(`${prevNum}세션 기록을 저장하고 ${nextNum}세션을 시작합니다.`);
+    } else {
+      const prevNum = currentSessionNumber;
+      const { stats } = computeParticipantStats(participantsRef.current, []);
+      const snapshot: CompletedSessionSnapshot = {
+        sessionNumber: prevNum,
+        goalMinutes,
+        durationSec: 0,
+        facilitatorTotalSec: 0,
+        participantStats: stats,
+        startedAt: nowIso,
+        endedAt: nowIso,
+      };
+      const nextNum = prevNum + 1;
+      const marker: SessionMarker = {
+        sessionNumber: nextNum,
+        label: `${nextNum}세션 시작`,
+        audioOffsetSec: 0,
+        startedAt: nowIso,
+      };
+      setCompletedSessions((prev) => [...prev, snapshot]);
+      setSessionMarkers((prev) => [...prev, marker]);
+      setCurrentSessionNumber(nextNum);
+      setCurrentSessionStartAudioSec(0);
+      showToast(`${prevNum}세션 기록을 저장하고 ${nextNum}세션을 준비했습니다.`);
+    }
+  }, [
+    closeCurrentTurnAndSwitch,
+    currentSessionNumber,
+    goalMinutes,
+    persistSnapshotToIdb,
+    showToast,
+    syncEngineClock,
+    syncUiFromEngine,
+  ]);
 
   const pauseSession = useCallback(() => {
     const eng = engineRef.current;
@@ -989,8 +1165,11 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     syncEngineClock();
     const prev = eng.timeline[eng.timeline.length - 1];
     if (!prev) return;
-    if (prev.audioPart !== eng.currentAudioPart) {
-      showToast('이전 녹음 파트 구간은 실행 취소할 수 없습니다.');
+    if (
+      prev.audioPart !== eng.currentAudioPart ||
+      (prev.sessionNumber ?? 1) !== eng.currentSessionNumber
+    ) {
+      showToast('이전 녹음 파트 또는 이전 세션 구간은 실행 취소할 수 없습니다.');
       return;
     }
 
@@ -1120,87 +1299,110 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     showToast('이전 세션 백업 데이터를 삭제했습니다.');
   }, [recoverableSession, showToast]);
 
-  // Compute live participant metrics & 4-stage balance color classification
-  const { participantMetrics, facilitatorTotalSec, participantsTotalSec } = useMemo(() => {
-    const totals = new Map<string, number>();
-    const turns = new Map<string, number>();
-    let facTotal = 0;
+  // Compute live participant metrics & 4-stage balance color classification (current session + overall)
+  const {
+    participantMetrics,
+    overallParticipantMetrics,
+    facilitatorTotalSec,
+    overallFacilitatorTotalSec,
+    participantsTotalSec,
+  } = useMemo(() => {
+    const buildMetricsForEntries = (entries: TimelineEntry[]) => {
+      const totals = new Map<string, number>();
+      const turns = new Map<string, number>();
+      let facTotal = 0;
 
-    for (const entry of timelineSnapshot) {
-      if (entry.speakerId === 'facilitator') {
-        facTotal += entry.durationSec;
-      } else {
-        totals.set(entry.speakerId, (totals.get(entry.speakerId) ?? 0) + entry.durationSec);
-        if (!entry.isContinuation) {
-          turns.set(entry.speakerId, (turns.get(entry.speakerId) ?? 0) + 1);
+      for (const entry of entries) {
+        if (entry.speakerId === 'facilitator') {
+          facTotal += entry.durationSec;
+        } else {
+          totals.set(entry.speakerId, (totals.get(entry.speakerId) ?? 0) + entry.durationSec);
+          if (!entry.isContinuation) {
+            turns.set(entry.speakerId, (turns.get(entry.speakerId) ?? 0) + 1);
+          }
         }
       }
-    }
 
-    if (sessionStatus === 'running' || sessionStatus === 'paused') {
-      if (activeSpeakerId === 'facilitator') {
-        facTotal += currentTurnElapsedSec;
-      } else {
-        totals.set(activeSpeakerId, (totals.get(activeSpeakerId) ?? 0) + currentTurnElapsedSec);
-        if (!activeTurnIsContinuation) {
-          turns.set(activeSpeakerId, (turns.get(activeSpeakerId) ?? 0) + 1);
+      if (sessionStatus === 'running' || sessionStatus === 'paused') {
+        if (activeSpeakerId === 'facilitator') {
+          facTotal += currentTurnElapsedSec;
+        } else {
+          totals.set(activeSpeakerId, (totals.get(activeSpeakerId) ?? 0) + currentTurnElapsedSec);
+          if (!activeTurnIsContinuation) {
+            turns.set(activeSpeakerId, (turns.get(activeSpeakerId) ?? 0) + 1);
+          }
         }
       }
-    }
 
-    let pSum = 0;
-    for (const p of participants) {
-      pSum += totals.get(p.id) ?? 0;
-    }
-
-    const equalSharePct = participants.length > 0 ? 100 / participants.length : 100;
-    const metrics: Record<string, LiveParticipantMetrics> = {};
-
-    for (const p of participants) {
-      const totalSec = totals.get(p.id) ?? 0;
-      const turnCount = turns.get(p.id) ?? 0;
-      const sharePct = pSum > 0 ? (totalSec / pSum) * 100 : 0;
-      const isSpeaking =
-        (sessionStatus === 'running' || sessionStatus === 'paused') && activeSpeakerId === p.id;
-
-      let balanceState: SpeakerBalanceState;
-      if (isSpeaking) {
-        balanceState = 'speaking';
-      } else if (totalSec <= 0) {
-        balanceState = 'unspoken';
-      } else if (pSum >= 60 && sharePct > equalSharePct * 1.5) {
-        balanceState = 'dominant';
-      } else {
-        balanceState = 'balanced';
+      let pSum = 0;
+      for (const p of participants) {
+        pSum += totals.get(p.id) ?? 0;
       }
 
-      metrics[p.id] = {
-        totalSec,
-        turnCount,
-        sharePct,
-        balanceState,
-        currentTurnElapsedSec: isSpeaking ? currentTurnElapsedSec : 0,
-      };
-    }
+      const equalSharePct = participants.length > 0 ? 100 / participants.length : 100;
+      const metrics: Record<string, LiveParticipantMetrics> = {};
+
+      for (const p of participants) {
+        const totalSec = totals.get(p.id) ?? 0;
+        const turnCount = turns.get(p.id) ?? 0;
+        const sharePct = pSum > 0 ? (totalSec / pSum) * 100 : 0;
+        const isSpeaking =
+          (sessionStatus === 'running' || sessionStatus === 'paused') && activeSpeakerId === p.id;
+
+        let balanceState: SpeakerBalanceState;
+        if (isSpeaking) {
+          balanceState = 'speaking';
+        } else if (totalSec <= 0) {
+          balanceState = 'unspoken';
+        } else if (pSum >= 60 && sharePct > equalSharePct * 1.5) {
+          balanceState = 'dominant';
+        } else {
+          balanceState = 'balanced';
+        }
+
+        metrics[p.id] = {
+          totalSec,
+          turnCount,
+          sharePct,
+          balanceState,
+          currentTurnElapsedSec: isSpeaking ? currentTurnElapsedSec : 0,
+        };
+      }
+
+      return { metrics, facTotal, pSum };
+    };
+
+    const currentEntries = timelineSnapshot.filter(
+      (e) => (e.sessionNumber ?? 1) === currentSessionNumber
+    );
+    const current = buildMetricsForEntries(currentEntries);
+    const overall = buildMetricsForEntries(timelineSnapshot);
 
     return {
-      participantMetrics: metrics,
-      facilitatorTotalSec: facTotal,
-      participantsTotalSec: pSum,
+      participantMetrics: current.metrics,
+      overallParticipantMetrics: overall.metrics,
+      facilitatorTotalSec: current.facTotal,
+      overallFacilitatorTotalSec: overall.facTotal,
+      participantsTotalSec: current.pSum,
     };
   }, [
     activeSpeakerId,
     activeTurnIsContinuation,
+    currentSessionNumber,
     currentTurnElapsedSec,
     participants,
     sessionStatus,
     timelineSnapshot,
   ]);
 
+  const currentSessionElapsedSec =
+    sessionStatus === 'idle' ? 0 : Math.max(0, elapsedAudioSec - currentSessionStartAudioSec);
+
   const canUndo =
     (sessionStatus === 'running' || sessionStatus === 'paused') &&
     timelineSnapshot.length > 0 &&
-    timelineSnapshot[timelineSnapshot.length - 1]?.audioPart === engineRef.current.currentAudioPart;
+    timelineSnapshot[timelineSnapshot.length - 1]?.audioPart === engineRef.current.currentAudioPart &&
+    (timelineSnapshot[timelineSnapshot.length - 1]?.sessionNumber ?? 1) === currentSessionNumber;
 
   const value: SessionContextValue = {
     participants,
@@ -1215,12 +1417,18 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     activeSpeakerId,
     activeSpeakerName,
     elapsedAudioSec,
+    currentSessionNumber,
+    currentSessionElapsedSec,
     currentTurnElapsedSec,
     facilitatorTotalSec,
+    overallFacilitatorTotalSec,
     participantsTotalSec,
     canUndo,
     timeline: timelineSnapshot,
+    completedSessions,
+    sessionMarkers,
     participantMetrics,
+    overallParticipantMetrics,
     recoverableSession,
     lastCompletedSession,
     resultModal,
@@ -1240,6 +1448,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     swapSeats,
     resetLayout,
     startSession,
+    startNextSession,
     pauseSession,
     resumeSession,
     selectSpeaker,

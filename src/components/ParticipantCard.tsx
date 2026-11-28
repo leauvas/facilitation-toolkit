@@ -51,7 +51,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
   const [draftName, setDraftName] = useState(participant.name);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const { isDragging, handlePointerDown } = useSeatDrag({
+  const { isDragging, isLongPressing, handlePointerDown } = useSeatDrag({
     seatId: participant.id,
     mode,
     isBlocked: isEditingName,
@@ -268,6 +268,13 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           )}
         </div>
       </div>
+
+      {/* 900ms Long-Press Olive Gauge at bottom edge */}
+      {isLongPressing && (
+        <div className="pointer-events-none absolute bottom-0 left-1 right-1 h-0.5 overflow-hidden rounded-full bg-lime-200">
+          <div className="animate-long-press-fill h-full bg-lime-700" />
+        </div>
+      )}
     </div>
   );
 };

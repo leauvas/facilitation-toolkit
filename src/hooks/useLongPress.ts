@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 
 interface UseLongPressOptions {
   enabled: boolean;
@@ -13,6 +13,7 @@ export function useLongPress({
   moveThresholdPx = 8,
   onLongPress,
 }: UseLongPressOptions) {
+  const [isPressing, setIsPressing] = useState(false);
   const timerRef = useRef<number | null>(null);
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -22,6 +23,7 @@ export function useLongPress({
       timerRef.current = null;
     }
     startPosRef.current = null;
+    setIsPressing(false);
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLElement>) => {
@@ -30,9 +32,11 @@ export function useLongPress({
 
     clear();
     startPosRef.current = { x: e.clientX, y: e.clientY };
+    setIsPressing(true);
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
       startPosRef.current = null;
+      setIsPressing(false);
       if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
         navigator.vibrate(30);
       }
@@ -59,10 +63,13 @@ export function useLongPress({
   };
 
   return {
-    onPointerDown,
-    onPointerMove,
-    onPointerUp,
-    onPointerCancel,
-    onContextMenu,
+    isPressing,
+    handlers: {
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
+      onPointerCancel,
+      onContextMenu,
+    },
   };
 }

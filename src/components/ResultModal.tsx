@@ -56,7 +56,7 @@ export const ResultModal: React.FC = () => {
   };
 
   const handleDownloadTimelineTxt = () => {
-    const text = buildTimelineText(record.timeline);
+    const text = buildTimelineText(record.timeline, record.sessionMarkers);
     triggerFileDownload(text, `${prefix}화자_타임라인.txt`, 'text/plain;charset=utf-8');
   };
 

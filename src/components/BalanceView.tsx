@@ -59,7 +59,10 @@ const ShareChip: React.FC<ShareChipProps> = ({ participant, metrics, mode, onRen
     }
   }, [isEditing]);
 
-  const longPressHandlers = useLongPress({
+  const {
+    isPressing,
+    handlers: longPressHandlers,
+  } = useLongPress({
     enabled: mode === 'layout' && !isEditing,
     delayMs: 900,
     moveThresholdPx: 8,
@@ -85,7 +88,7 @@ const ShareChip: React.FC<ShareChipProps> = ({ participant, metrics, mode, onRen
   return (
     <div
       {...longPressHandlers}
-      className={`touch-callout-none min-w-0 select-none rounded-lg border px-2 py-1 transition [@media(max-height:450px)]:px-1.5 [@media(max-height:450px)]:py-0.5 ${
+      className={`touch-callout-none relative min-w-0 select-none rounded-lg border px-2 py-1 transition [@media(max-height:450px)]:px-1.5 [@media(max-height:450px)]:py-0.5 ${
         isEditing
           ? 'z-10 border-lime-600 bg-white ring-2 ring-lime-600'
           : 'border-stone-200 bg-stone-50/80'
@@ -131,6 +134,11 @@ const ShareChip: React.FC<ShareChipProps> = ({ participant, metrics, mode, onRen
           </div>
         </>
       )}
+      {isPressing && (
+        <div className="pointer-events-none absolute bottom-0 left-1 right-1 h-0.5 overflow-hidden rounded-full bg-lime-200">
+          <div className="animate-long-press-fill h-full bg-lime-700" />
+        </div>
+      )}
     </div>
   );
 };
@@ -154,11 +162,15 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
     sessionStatus,
     activeSpeakerId,
     activeSpeakerName,
-    elapsedAudioSec,
+    currentSessionNumber,
+    currentSessionElapsedSec,
     currentTurnElapsedSec,
     facilitatorTotalSec,
+    overallFacilitatorTotalSec,
     timeline,
+    completedSessions,
     participantMetrics,
+    overallParticipantMetrics,
     recoverableSession,
     lastCompletedSession,
     addParticipant,
@@ -179,7 +191,17 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [countDraft, setCountDraft] = useState<string>(String(participants.length));
   const [swapTargetId, setSwapTargetId] = useState<string | null>(null);
+  const [shareViewTab, setShareViewTab] = useState<'current' | 'prev' | 'total'>('current');
+  const [selectedPrevSessionNum, setSelectedPrevSessionNum] = useState<number>(1);
   const currentTimeHHMM = useCurrentTimeHHMM();
+
+  useEffect(() => {
+    if (completedSessions.length > 0) {
+      setSelectedPrevSessionNum(completedSessions[completedSessions.length - 1].sessionNumber);
+    } else if (shareViewTab === 'prev') {
+      setShareViewTab('current');
+    }
+  }, [completedSessions, shareViewTab]);
 
   const getAllSeatPositions = () => {
     const map: Record<string, { x: number; y: number }> = {};
@@ -217,10 +239,15 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
     : 1;
 
   const goalTotalSec = goalMinutes * 60;
-  const goalRemainingSec = Math.max(0, goalTotalSec - elapsedAudioSec);
+  const goalRemainingSec = Math.max(0, goalTotalSec - currentSessionElapsedSec);
   const goalProgressPct =
     goalTotalSec > 0 ? Math.min(100, Math.max(0, (goalRemainingSec / goalTotalSec) * 100)) : 0;
-  const isGoalOvertime = elapsedAudioSec > goalTotalSec;
+  const isGoalOvertime = isLive && currentSessionElapsedSec > goalTotalSec;
+
+  const activePrevSnapshot =
+    completedSessions.find((s) => s.sessionNumber === selectedPrevSessionNum) ??
+    completedSessions[completedSessions.length - 1] ??
+    null;
 
   const useTwoColBars = participants.length >= 7;
   const recentLogs = timeline.slice(-2).reverse();
@@ -604,7 +631,7 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
               isGoalOvertime ? 'text-orange-700' : 'text-lime-800'
             }`}
           >
-            목표 {goalMinutes}분
+            {currentSessionNumber}세션 · {goalMinutes}분
           </span>
         </div>
 
@@ -631,12 +658,21 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
           </div>
 
           <div className="mt-1 flex items-center justify-between text-[10px] font-semibold text-stone-600 tabular-nums">
-            <span>진행자 누적 {formatClockMMSS(facilitatorTotalSec)}</span>
+            <span>
+              진행자{' '}
+              {formatClockMMSS(
+                shareViewTab === 'total'
+                  ? overallFacilitatorTotalSec
+                  : shareViewTab === 'prev' && activePrevSnapshot
+                    ? activePrevSnapshot.facilitatorTotalSec
+                    : facilitatorTotalSec
+              )}
+            </span>
             <span className={isGoalOvertime ? 'text-orange-700' : 'text-stone-600'}>
-              목표 {goalMinutes}분 ·{' '}
+              {currentSessionNumber}세션 · {goalMinutes}분{' '}
               {isLive
                 ? isGoalOvertime
-                  ? `+${formatClockMMSS(elapsedAudioSec - goalTotalSec)}`
+                  ? `+${formatClockMMSS(currentSessionElapsedSec - goalTotalSec)}`
                   : formatClockMMSS(goalRemainingSec)
                 : formatClockMMSS(goalTotalSec)}
             </span>
@@ -652,19 +688,76 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
           </div>
         </div>
 
-        {/* Middle: Live Share Chips (Portrait: 2-col <=6 / 3-col 7..12; Landscape/Desktop: 1-col / 2-col) */}
+        {/* Middle: Live Share Chips with Session Tabs */}
         <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
-          <div className="mb-1 flex shrink-0 items-center justify-between gap-2">
+          <div className="mb-1 flex shrink-0 flex-wrap items-center justify-between gap-1">
             <span className="shrink-0 text-[11px] font-bold text-stone-600">실시간 발언 점유율</span>
-            <span className="truncate text-[11px] text-stone-500 sm:hidden landscape:hidden">
-              {recentLogs[0]
-                ? `최근: ${recentLogs[0].speaker} (${formatClockMMSS(recentLogs[0].startSec)}–${formatClockMMSS(recentLogs[0].endSec)})`
-                : `${participants.length}명`}
-            </span>
-            <span className="hidden text-[10px] font-semibold text-stone-400 tabular-nums sm:inline landscape:inline">
-              {participants.length}명
-            </span>
+            <div className="flex shrink-0 items-center gap-0.5 rounded-full bg-stone-100 p-0.5 text-[10px] font-semibold">
+              <button
+                type="button"
+                onClick={() => setShareViewTab('current')}
+                className={`whitespace-nowrap rounded-full px-1.5 py-0.5 transition ${
+                  shareViewTab === 'current'
+                    ? 'bg-lime-700 text-white'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                현재 세션
+              </button>
+              <button
+                type="button"
+                disabled={completedSessions.length === 0}
+                onClick={() => setShareViewTab('prev')}
+                className={`whitespace-nowrap rounded-full px-1.5 py-0.5 transition ${
+                  completedSessions.length === 0
+                    ? 'cursor-not-allowed text-stone-400'
+                    : shareViewTab === 'prev'
+                      ? 'bg-lime-700 text-white'
+                      : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                이전 ({completedSessions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setShareViewTab('total')}
+                className={`whitespace-nowrap rounded-full px-1.5 py-0.5 transition ${
+                  shareViewTab === 'total'
+                    ? 'bg-lime-700 text-white'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                전체 합산
+              </button>
+            </div>
           </div>
+
+          {/* Sub-selector when >= 2 completed sessions exist */}
+          {shareViewTab === 'prev' && completedSessions.length > 0 && (
+            <div className="mb-1 flex shrink-0 items-center justify-between gap-1 text-[10px] text-stone-600">
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                {completedSessions.map((s) => (
+                  <button
+                    key={s.sessionNumber}
+                    type="button"
+                    onClick={() => setSelectedPrevSessionNum(s.sessionNumber)}
+                    className={`shrink-0 whitespace-nowrap rounded-full border px-1.5 py-0.5 font-semibold transition ${
+                      (activePrevSnapshot?.sessionNumber ?? 1) === s.sessionNumber
+                        ? 'border-lime-600 bg-lime-100/80 text-lime-800'
+                        : 'border-stone-200 bg-white text-stone-600'
+                    }`}
+                  >
+                    {s.sessionNumber}세션
+                  </button>
+                ))}
+              </div>
+              {activePrevSnapshot && (
+                <span className="shrink-0 tabular-nums font-semibold text-stone-500">
+                  소요 {formatClockMMSS(activePrevSnapshot.durationSec)}
+                </span>
+              )}
+            </div>
+          )}
 
           <div
             className={`grid flex-1 min-h-0 content-start overflow-hidden ${
@@ -673,23 +766,53 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
                 : 'grid-cols-2 gap-1.5 sm:grid-cols-1 sm:gap-y-1.5 landscape:grid-cols-1 landscape:gap-y-1 [@media(max-height:450px)]:gap-y-1'
             }`}
           >
-            {participants.map((p) => (
-              <ShareChip
-                key={p.id}
-                participant={p}
-                metrics={
-                  participantMetrics[p.id] ?? {
-                    totalSec: 0,
-                    turnCount: 0,
-                    sharePct: 0,
-                    balanceState: 'unspoken',
-                    currentTurnElapsedSec: 0,
-                  }
-                }
-                mode={mode}
-                onRename={renameParticipant}
-              />
-            ))}
+            {participants.map((p) => {
+              let chipMetrics: LiveParticipantMetrics;
+              if (shareViewTab === 'prev' && activePrevSnapshot) {
+                const stat = activePrevSnapshot.participantStats.find((s) => s.id === p.id);
+                const totalSec = stat?.totalSec ?? 0;
+                const turnCount = stat?.turnCount ?? 0;
+                const sharePct = stat?.sharePct ?? 0;
+                const equalSharePct = participants.length > 0 ? 100 / participants.length : 100;
+                const prevSum = activePrevSnapshot.participantStats.reduce(
+                  (acc, s) => acc + s.totalSec,
+                  0
+                );
+                const balanceState =
+                  totalSec <= 0
+                    ? 'unspoken'
+                    : prevSum >= 60 && sharePct > equalSharePct * 1.5
+                      ? 'dominant'
+                      : 'balanced';
+                chipMetrics = {
+                  totalSec,
+                  turnCount,
+                  sharePct,
+                  balanceState,
+                  currentTurnElapsedSec: 0,
+                };
+              } else {
+                const source =
+                  shareViewTab === 'total' ? overallParticipantMetrics : participantMetrics;
+                chipMetrics = source[p.id] ?? {
+                  totalSec: 0,
+                  turnCount: 0,
+                  sharePct: 0,
+                  balanceState: 'unspoken',
+                  currentTurnElapsedSec: 0,
+                };
+              }
+
+              return (
+                <ShareChip
+                  key={p.id}
+                  participant={p}
+                  metrics={chipMetrics}
+                  mode={mode}
+                  onRename={renameParticipant}
+                />
+              );
+            })}
           </div>
         </div>
 

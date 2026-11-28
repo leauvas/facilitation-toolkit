@@ -31,6 +31,24 @@ export interface TimelineEntry {
   partStartSec: number; // offset within audioPart file (2 decimals)
   partEndSec: number;
   isContinuation?: boolean; // true when split across audioPart boundaries
+  sessionNumber?: number; // 1-based workshop session number
+}
+
+export interface SessionMarker {
+  sessionNumber: number;
+  label: string;
+  audioOffsetSec: number;
+  startedAt: string;
+}
+
+export interface CompletedSessionSnapshot {
+  sessionNumber: number;
+  goalMinutes: number;
+  durationSec: number;
+  facilitatorTotalSec: number;
+  participantStats: ParticipantStat[];
+  startedAt: string;
+  endedAt: string;
 }
 
 export interface PausedRange {
@@ -51,6 +69,8 @@ export interface SessionRecord {
   timeline: TimelineEntry[];
   pausedRanges: PausedRange[];
   audioPartsCount: number;
+  sessionMarkers?: SessionMarker[];
+  completedSessions?: CompletedSessionSnapshot[];
 }
 
 export interface AudioPartBlob {

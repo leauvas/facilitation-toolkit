@@ -49,6 +49,7 @@ export function useSeatDrag({
   onLongPress,
 }: UseSeatDragOptions) {
   const [isDragging, setIsDragging] = useState(false);
+  const [isLongPressing, setIsLongPressing] = useState(false);
   const swapTargetRef = useRef<string | null>(null);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -110,6 +111,7 @@ export function useSeatDrag({
         window.clearTimeout(longPressTimer);
         longPressTimer = null;
       }
+      setIsLongPressing(false);
     };
 
     const onPointerMove = (moveEv: PointerEvent) => {
@@ -174,8 +176,10 @@ export function useSeatDrag({
     };
 
     if (onLongPress) {
+      setIsLongPressing(true);
       longPressTimer = window.setTimeout(() => {
         longPressTimer = null;
+        setIsLongPressing(false);
         swapTargetRef.current = null;
         onSwapTargetChange(null);
         cleanup();
@@ -210,5 +214,5 @@ export function useSeatDrag({
     window.addEventListener('pointercancel', onPointerCancel);
   };
 
-  return { isDragging, handlePointerDown };
+  return { isDragging, isLongPressing, handlePointerDown };
 }

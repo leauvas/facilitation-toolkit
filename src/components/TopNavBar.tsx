@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  ChevronDown,
   Clock,
   Mic,
   MicOff,
@@ -13,7 +14,6 @@ import {
 import { TabRoute } from '../types/facilitation';
 import { useSession } from '../context/SessionContext';
 import { formatClockMMSS } from '../lib/exportUtils';
-import { useCurrentTimeHHMM } from '../hooks/useCurrentTime';
 
 interface TopNavBarProps {
   activeTab: TabRoute;
@@ -21,7 +21,7 @@ interface TopNavBarProps {
   onRequestEndSession: () => void;
 }
 
-const GOAL_PRESETS = [30, 60, 90, 120];
+const GOAL_PRESETS = [15, 20, 30, 40];
 
 export const TopNavBar: React.FC<TopNavBarProps> = ({
   activeTab,
@@ -34,13 +34,18 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
     sessionStatus,
     activeSpeakerName,
     elapsedAudioSec,
+    currentSessionNumber,
+    currentSessionElapsedSec,
     currentTurnElapsedSec,
     goalMinutes,
     setGoalMinutes,
     recordingEnabled,
     setRecordingEnabled,
+    completedSessions,
+    sessionMarkers,
     canUndo,
     startSession,
+    startNextSession,
     pauseSession,
     resumeSession,
     undoLastSwitch,
@@ -48,15 +53,14 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
 
   const [showGoalPopover, setShowGoalPopover] = useState(false);
   const [customGoalInput, setCustomGoalInput] = useState(String(goalMinutes));
-  const currentTimeHHMM = useCurrentTimeHHMM();
 
   const goalTotalSec = goalMinutes * 60;
-  const goalRemainingSec = Math.max(0, goalTotalSec - elapsedAudioSec);
+  const goalRemainingSec = Math.max(0, goalTotalSec - currentSessionElapsedSec);
   const goalProgressPct =
     goalTotalSec > 0 ? Math.min(100, Math.max(0, (goalRemainingSec / goalTotalSec) * 100)) : 0;
-  const isGoalOvertime = elapsedAudioSec > goalTotalSec;
 
   const isLive = sessionStatus === 'running' || sessionStatus === 'paused';
+  const isGoalOvertime = isLive && currentSessionElapsedSec > goalTotalSec;
 
   const openGoalPopover = () => {
     setCustomGoalInput(String(goalMinutes));
@@ -66,7 +70,6 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
   const handleSelectPreset = (minutes: number) => {
     setGoalMinutes(minutes);
     setCustomGoalInput(String(minutes));
-    setShowGoalPopover(false);
   };
 
   const applyCustomGoal = (e: React.FormEvent) => {
@@ -74,15 +77,19 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
     const parsed = Number.parseInt(customGoalInput, 10);
     if (!Number.isNaN(parsed) && parsed >= 5 && parsed <= 360) {
       setGoalMinutes(parsed);
-      setShowGoalPopover(false);
     }
+  };
+
+  const handleStartNextSession = () => {
+    startNextSession();
+    setShowGoalPopover(false);
   };
 
   return (
     <>
       <header className="relative z-30 min-h-[44px] w-full shrink-0 border-b border-stone-200 bg-white py-1.5 sm:py-1">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-1.5 px-2 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-          {/* Row 1: Primary Tab Navigation (and mini badge on timer tab) */}
+          {/* Row 1: Primary Tab Navigation */}
           <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
             <nav
               aria-label="도구 탭 전환"
@@ -132,24 +139,21 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
           {/* Row 2 on mobile portrait (Right side on sm+): Session Controls */}
           {activeTab === 'balance' ? (
             <div className="flex w-full flex-wrap items-center justify-between gap-1 sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-1.5">
-              {/* Live Current Time Pill (left of Goal Time) */}
-              <div
-                title="현재 시각 (24시간제)"
-                className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-stone-200 bg-stone-100 px-2 py-1 text-[11px] font-semibold text-stone-700 tabular-nums"
-              >
-                <Clock className="h-3 w-3 shrink-0 text-lime-700" />
-                <span>{currentTimeHHMM}</span>
-              </div>
-
-              {/* Goal Time & Countdown Gauge Button */}
+              {/* Session & Goal Time Badge ({N}세션 · {M}분 ▾) */}
               <button
                 type="button"
                 onClick={openGoalPopover}
-                title="전체 목표 시간 설정"
-                className="flex shrink-0 flex-col justify-center rounded-lg border border-stone-200 bg-stone-100 px-2 py-0.5 text-left transition hover:border-lime-600"
+                title="세션 관리 및 목표 시간 설정"
+                className={`flex shrink-0 flex-col justify-center rounded-lg border px-2 py-0.5 text-left transition ${
+                  isGoalOvertime
+                    ? 'border-orange-500 bg-orange-50 hover:border-orange-600'
+                    : 'border-stone-200 bg-stone-100 hover:border-lime-600'
+                }`}
               >
                 <div className="flex items-center gap-1 whitespace-nowrap text-[11px] font-semibold leading-tight">
-                  <span className="text-stone-600">목표 {goalMinutes}분</span>
+                  <span className={isGoalOvertime ? 'text-orange-700' : 'text-stone-700'}>
+                    {currentSessionNumber}세션 · {goalMinutes}분{isGoalOvertime ? ' 초과' : ''}
+                  </span>
                   {isLive && (
                     <span
                       className={`tabular-nums font-bold ${
@@ -157,12 +161,17 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                       }`}
                     >
                       {isGoalOvertime
-                        ? `+${formatClockMMSS(elapsedAudioSec - goalTotalSec)}`
+                        ? `+${formatClockMMSS(currentSessionElapsedSec - goalTotalSec)}`
                         : formatClockMMSS(goalRemainingSec)}
                     </span>
                   )}
+                  <ChevronDown
+                    className={`h-3 w-3 shrink-0 ${
+                      isGoalOvertime ? 'text-orange-600' : 'text-stone-500'
+                    }`}
+                  />
                 </div>
-                <div className="mt-0.5 h-1 w-full min-w-[44px] overflow-hidden rounded-full bg-stone-200">
+                <div className="mt-0.5 h-1 w-full min-w-[54px] overflow-hidden rounded-full bg-stone-200">
                   <div
                     className={`h-full transition-all duration-300 ${
                       isGoalOvertime ? 'bg-orange-600' : 'bg-lime-700'
@@ -227,7 +236,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                 </button>
               )}
 
-              {/* Layout Mode Light-Switch Toggle */}
+              {/* Layout Mode Light-Switch Toggle (always '좌석배치', no icon) */}
               <button
                 type="button"
                 aria-pressed={mode === 'layout'}
@@ -237,9 +246,9 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                     ? 'border-lime-700 bg-lime-700 text-white shadow-xs'
                     : 'border-stone-200 bg-stone-100 text-stone-700 hover:bg-stone-200'
                 }`}
-                title="좌석 배치 편집 모드 ON/OFF"
+                title="좌석배치 편집 모드 ON/OFF"
               >
-                <span>좌석 배치</span>
+                <span>좌석배치</span>
               </button>
 
               {/* Session Action Buttons */}
@@ -338,19 +347,21 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
         </div>
       </header>
 
-      {/* Portal Goal Time Selector Modal/Popover */}
+      {/* Portal Session & Goal Time Management Popover / Sheet */}
       {showGoalPopover &&
         createPortal(
           <div
-            className="fixed inset-0 z-50 flex items-start justify-end bg-stone-900/20 p-2 pt-24 sm:p-4 sm:pt-14"
+            className="fixed inset-0 z-50 flex items-start justify-end bg-stone-900/25 p-2 pt-24 sm:p-4 sm:pt-14"
             onClick={() => setShowGoalPopover(false)}
           >
             <div
-              className="w-64 rounded-2xl border border-stone-200 bg-white p-3.5 shadow-xl"
+              className="flex max-h-[75dvh] w-full max-w-xs flex-col gap-3 overflow-y-auto rounded-2xl border border-stone-200 bg-white p-3.5 shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="mb-2.5 flex items-center justify-between">
-                <span className="text-xs font-bold text-stone-900">전체 토론 목표 시간</span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-stone-900">
+                  {currentSessionNumber}세션 · 목표 시간 관리
+                </span>
                 <button
                   type="button"
                   onClick={() => setShowGoalPopover(false)}
@@ -360,40 +371,95 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                 </button>
               </div>
 
-              <div className="mb-2.5 grid grid-cols-4 gap-1.5">
-                {GOAL_PRESETS.map((m) => (
+              {/* Goal Presets & Direct Input */}
+              <div className="space-y-2">
+                <div className="grid grid-cols-4 gap-1.5">
+                  {GOAL_PRESETS.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => handleSelectPreset(m)}
+                      className={`rounded-lg border py-1.5 text-xs font-bold transition ${
+                        goalMinutes === m
+                          ? 'border-lime-600 bg-lime-700 text-white'
+                          : 'border-stone-200 bg-stone-100 text-stone-900 hover:bg-stone-200'
+                      }`}
+                    >
+                      {m}분
+                    </button>
+                  ))}
+                </div>
+
+                <form onSubmit={applyCustomGoal} className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={5}
+                    max={360}
+                    value={customGoalInput}
+                    onChange={(e) => setCustomGoalInput(e.target.value)}
+                    className="w-full rounded-lg border border-stone-200 bg-stone-100 px-2.5 py-1.5 text-xs font-semibold tabular-nums text-stone-900 focus:border-lime-600 focus:bg-white focus:outline-none"
+                    placeholder="직접 입력 (5~360분)"
+                  />
                   <button
-                    key={m}
-                    type="button"
-                    onClick={() => handleSelectPreset(m)}
-                    className={`rounded-lg border py-1.5 text-xs font-bold transition ${
-                      goalMinutes === m
-                        ? 'border-lime-600 bg-lime-700 text-white'
-                        : 'border-stone-200 bg-stone-100 text-stone-900 hover:bg-stone-200'
-                    }`}
+                    type="submit"
+                    className="shrink-0 rounded-lg bg-lime-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-lime-800"
                   >
-                    {m}분
+                    적용
                   </button>
-                ))}
+                </form>
               </div>
 
-              <form onSubmit={applyCustomGoal} className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  min={5}
-                  max={360}
-                  value={customGoalInput}
-                  onChange={(e) => setCustomGoalInput(e.target.value)}
-                  className="w-full rounded-lg border border-stone-200 bg-stone-100 px-2.5 py-1.5 text-xs font-semibold tabular-nums text-stone-900 focus:border-lime-600 focus:bg-white focus:outline-none"
-                  placeholder="직접 입력 (5~360분)"
-                />
-                <button
-                  type="submit"
-                  className="shrink-0 rounded-lg bg-lime-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-lime-800"
-                >
-                  적용
-                </button>
-              </form>
+              {/* Start Next Session (Snapshot + Keep Recording) */}
+              <button
+                type="button"
+                onClick={handleStartNextSession}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-lime-700 px-3 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-lime-800 active:scale-98"
+              >
+                <Play className="h-3 w-3 fill-current" />
+                <span>{currentSessionNumber + 1}세션 시작 (현재 세션 기록 저장)</span>
+              </button>
+
+              {/* Completed Sessions Summary */}
+              {completedSessions.length > 0 && (
+                <div className="border-t border-stone-200 pt-2">
+                  <p className="mb-1 text-[11px] font-bold text-stone-600">
+                    완료된 세션 ({completedSessions.length})
+                  </p>
+                  <div className="space-y-1">
+                    {completedSessions.map((s) => (
+                      <div
+                        key={s.sessionNumber}
+                        className="flex items-center justify-between rounded-lg bg-stone-100 px-2.5 py-1 text-[11px]"
+                      >
+                        <span className="font-bold text-stone-900">{s.sessionNumber}세션</span>
+                        <span className="tabular-nums text-stone-600">
+                          목표 {s.goalMinutes}분 · 소요 {formatClockMMSS(s.durationSec)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Recording Markers Timeline */}
+              {sessionMarkers.length > 0 && (
+                <div className="border-t border-stone-200 pt-2">
+                  <p className="mb-1 text-[11px] font-bold text-stone-600">전체 녹음 구간 마커</p>
+                  <div className="space-y-0.5">
+                    {sessionMarkers.map((m) => (
+                      <div
+                        key={`${m.sessionNumber}-${m.audioOffsetSec}`}
+                        className="flex items-center justify-between text-[11px] text-stone-600"
+                      >
+                        <span className="font-medium text-stone-900">{m.label}</span>
+                        <span className="tabular-nums font-semibold">
+                          [{formatClockMMSS(m.audioOffsetSec)}]
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>,
           document.body

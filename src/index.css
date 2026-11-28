@@ -82,6 +82,19 @@
   animation: hourglass-rock 2.4s ease-in-out infinite;
 }
 
+@keyframes long-press-fill {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+.animate-long-press-fill {
+  animation: long-press-fill 900ms linear forwards;
+}
+
 @media (max-height: 450px) {
   .landscape-hide-label {
     display: none;
