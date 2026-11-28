@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Circle,
+  Clock,
   Download,
   History,
+  Hourglass,
   Mic,
   Minus,
   Plus,
@@ -13,6 +15,7 @@ import {
 import { useSession } from '../context/SessionContext';
 import { MAX_PARTICIPANTS, MIN_PARTICIPANTS } from '../lib/layoutUtils';
 import { formatClockMMSS } from '../lib/exportUtils';
+import { useCurrentTimeHHMM } from '../hooks/useCurrentTime';
 import { HourglassSvg } from './HourglassSvg';
 import { ParticipantCard } from './ParticipantCard';
 import { FacilitatorCard } from './FacilitatorCard';
@@ -74,6 +77,7 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [countDraft, setCountDraft] = useState<string>(String(participants.length));
   const [swapTargetId, setSwapTargetId] = useState<string | null>(null);
+  const currentTimeHHMM = useCurrentTimeHHMM();
 
   const getAllSeatPositions = () => {
     const map: Record<string, { x: number; y: number }> = {};
@@ -192,24 +196,51 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
                 : 'h-[38%] w-[46%] min-h-[116px] min-w-[164px] max-h-[228px] max-w-[332px] rounded-3xl [@media(max-height:450px)]:h-[98px] [@media(max-height:450px)]:min-h-[96px]'
             }`}
           >
-            <HourglassSvg
-              remainingRatio={remainingRatio}
-              isOvertime={isOvertime}
-              isActiveParticipant={isParticipantSpeaking}
-              isPaused={sessionStatus === 'paused'}
-              sizeClass="h-9 w-9 sm:h-14 sm:w-14 [@media(max-height:450px)]:h-7 [@media(max-height:450px)]:w-7"
-            />
+            {sessionStatus === 'idle' ? (
+              <div className="mb-1 flex flex-col items-center">
+                <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[9px] font-semibold text-stone-600 shadow-2xs sm:text-[10px]">
+                  <Clock className="h-2.5 w-2.5 text-lime-700" />
+                  <span>현재 시각</span>
+                </span>
+                <span className="mt-0.5 tabular-nums text-xl font-extrabold leading-tight tracking-tight text-stone-900 sm:text-3xl [@media(max-height:450px)]:text-lg">
+                  {currentTimeHHMM}
+                </span>
+              </div>
+            ) : (
+              <HourglassSvg
+                remainingRatio={remainingRatio}
+                isOvertime={isOvertime}
+                isActiveParticipant={isParticipantSpeaking}
+                isPaused={sessionStatus === 'paused'}
+                sizeClass="h-9 w-9 sm:h-14 sm:w-14 [@media(max-height:450px)]:h-7 [@media(max-height:450px)]:w-7"
+              />
+            )}
 
             <div className="px-2">
-              <p className="max-w-[110px] truncate text-[10px] font-bold text-stone-900 sm:max-w-[176px] sm:text-xs">
-                {sessionStatus === 'idle'
-                  ? '준비 완료'
-                  : sessionStatus === 'paused'
-                    ? '일시정지'
-                    : isParticipantSpeaking
-                      ? `${activeSpeakerName} 발언 중`
-                      : '진행자 발언 중'}
-              </p>
+              <div className="flex items-center justify-center gap-1">
+                {sessionStatus !== 'idle' && (
+                  <Hourglass
+                    className={`h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5 ${
+                      sessionStatus === 'running' ? 'animate-hourglass-rock' : ''
+                    } ${
+                      isOvertime
+                        ? 'text-orange-600'
+                        : isParticipantSpeaking
+                          ? 'text-lime-700'
+                          : 'text-stone-500'
+                    }`}
+                  />
+                )}
+                <p className="max-w-[110px] truncate text-[10px] font-bold text-stone-900 sm:max-w-[176px] sm:text-xs">
+                  {sessionStatus === 'idle'
+                    ? '준비 완료'
+                    : sessionStatus === 'paused'
+                      ? '일시정지'
+                      : isParticipantSpeaking
+                        ? `${activeSpeakerName} 발언 중`
+                        : '진행자 발언 중'}
+                </p>
+              </div>
               <p
                 className={`tabular-nums text-xs font-extrabold sm:text-base [@media(max-height:450px)]:text-xs ${
                   isOvertime

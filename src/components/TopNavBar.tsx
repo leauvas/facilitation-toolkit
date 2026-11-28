@@ -14,6 +14,7 @@ import {
 import { TabRoute } from '../types/facilitation';
 import { useSession } from '../context/SessionContext';
 import { formatClockMMSS } from '../lib/exportUtils';
+import { useCurrentTimeHHMM } from '../hooks/useCurrentTime';
 
 interface TopNavBarProps {
   activeTab: TabRoute;
@@ -48,6 +49,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
 
   const [showGoalPopover, setShowGoalPopover] = useState(false);
   const [customGoalInput, setCustomGoalInput] = useState(String(goalMinutes));
+  const currentTimeHHMM = useCurrentTimeHHMM();
 
   const goalTotalSec = goalMinutes * 60;
   const goalRemainingSec = Math.max(0, goalTotalSec - elapsedAudioSec);
@@ -131,6 +133,15 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
           {/* Row 2 on mobile portrait (Right side on sm+): Session Controls */}
           {activeTab === 'balance' ? (
             <div className="flex w-full flex-wrap items-center justify-between gap-1 sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-1.5">
+              {/* Live Current Time Pill (left of Goal Time) */}
+              <div
+                title="현재 시각 (24시간제)"
+                className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-stone-200 bg-stone-100 px-2 py-1 text-[11px] font-semibold text-stone-700 tabular-nums"
+              >
+                <Clock className="h-3 w-3 shrink-0 text-lime-700" />
+                <span>{currentTimeHHMM}</span>
+              </div>
+
               {/* Goal Time & Countdown Gauge Button */}
               <button
                 type="button"

@@ -64,6 +64,20 @@
   animation: sand-drop 0.65s linear infinite;
 }
 
+@keyframes hourglass-rock {
+  0%,
+  100% {
+    transform: rotate(-8deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
+
+.animate-hourglass-rock {
+  animation: hourglass-rock 2.4s ease-in-out infinite;
+}
+
 @media (max-height: 450px) {
   .landscape-hide-label {
     display: none;
